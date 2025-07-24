@@ -1,0 +1,45 @@
+/* Grocery List specific styles */
+.grocery-list-container {
+  transition: max-height 0.3s ease-in-out;
+  overflow: hidden;
+}
+
+.grocery-list-container.collapsed {
+  max-height: 0;
+}
+
+.grocery-list-container.expanded {
+  max-height: 1000px; /* Adjust as needed */
+}
+
+.collapse-icon {
+  transition: transform 0.3s ease;
+}
+
+.collapse-icon.up {
+  transform: rotate(180deg);
+}
+
+/* Scrollbar styling */
+.max-h-80 {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+  scrollbar-gutter: stable;
+}
+
+.max-h-80::-webkit-scrollbar {
+  width: 6px;
+}
+
+.max-h-80::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.max-h-80::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 20px;
+}
+
+.max-h-80::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.8);
+}

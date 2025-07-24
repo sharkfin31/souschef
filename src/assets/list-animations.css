@@ -1,0 +1,41 @@
+/* List creation animation */
+.create-list-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-height: 40px; /* Ensure consistent height */
+}
+
+.create-list-form {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  right: 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s 0.3s;
+}
+
+.create-list-form.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.create-list-button {
+  position: absolute;
+  right: 0;
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s;
+}
+
+.create-list-button.hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s 0.3s;
+}
