@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 import sys
+import logging
 from pathlib import Path
 
 # Add the parent directory to sys.path
@@ -13,7 +14,15 @@ from routes.recipe_routes import router as recipe_router
 from routes.grocery_routes import router as grocery_router
 from config import UPLOAD_DIR
 
-app = FastAPI(title="SousChef API", description="Recipe extraction and management API")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="SousChef API", 
+    description="Recipe extraction and management API with unified URL processing",
+    version="2.0.0"
+)
 
 # Configure CORS
 app.add_middleware(

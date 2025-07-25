@@ -4,10 +4,61 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import '../assets/grocery-animations.css';
 import '../assets/list-animations.css';
 import './GroceryList.css';
-import { getGroceryLists, updateGroceryItemStatus, createCustomList, moveItemToList, deleteGroceryList, deleteGroceryItem, updateGroceryListName, shareGroceryList } from '../services/groceryService';
+import { getGroceryLists, updateGroceryItemStatus, createCustomList, moveItemToList, deleteGroceryList, deleteGroceryItem, updateGroceryListName, shareMultipleGroceryLists } from '../services/grocery/groceryService';
 import { GroceryList as GroceryListType } from '../types/recipe';
-import { FaSpinner, FaShoppingBasket, FaPlus, FaTrash, FaChevronUp, FaShareAlt } from 'react-icons/fa';
-import { FaPen, FaCheck, FaXmark } from "react-icons/fa6"; 
+import { FaSpinner, FaShoppingBasket, FaPlus, FaTrash, FaChevronUp, FaShareAlt, FaCheck } from 'react-icons/fa';
+import { FaPen, FaXmark } from "react-icons/fa6";
+import ShareListsModal from '../components/ShareListsModal';
+
+// Helper functions for ingredient normalization
+const normalizeIngredientName = (name: string): string => {
+  let normalized = name.toLowerCase();
+  const prefixesToRemove = ['fresh ', 'dried ', 'frozen ', 'chopped ', 'sliced ', 'diced ', 'minced ', 'whole '];
+  const suffixesToRemove = [' leaves', ' bunch', ' bunches', ' stalk', ' stalks', ' sprig', ' sprigs', ' clove', ' cloves'];
+  
+  prefixesToRemove.forEach(prefix => {
+    if (normalized.startsWith(prefix)) {
+      normalized = normalized.slice(prefix.length);
+    }
+  });
+  
+  suffixesToRemove.forEach(suffix => {
+    if (normalized.endsWith(suffix)) {
+      normalized = normalized.slice(0, normalized.length - suffix.length);
+    }
+  });
+  
+  return normalized.trim();
+};
+
+const normalizeUnit = (unit: string | null): string | null => {
+  if (!unit) return null;
+  
+  const unitMap: Record<string, string> = {
+    'g': 'g', 'gm': 'g', 'gram': 'g', 'grams': 'g',
+    'kg': 'kg', 'kilo': 'kg', 'kilos': 'kg', 'kilogram': 'kg', 'kilograms': 'kg',
+    'ml': 'ml', 'milliliter': 'ml', 'milliliters': 'ml', 'millilitre': 'ml', 'millilitres': 'ml',
+    'l': 'l', 'liter': 'l', 'liters': 'l', 'litre': 'l', 'litres': 'l',
+    'oz': 'oz', 'ounce': 'oz', 'ounces': 'oz',
+    'lb': 'lb', 'lbs': 'lb', 'pound': 'lb', 'pounds': 'lb',
+    'tbsp': 'tbsp', 'tablespoon': 'tbsp', 'tablespoons': 'tbsp',
+    'tsp': 'tsp', 'teaspoon': 'tsp', 'teaspoons': 'tsp',
+    'cup': 'cup', 'cups': 'cup'
+  };
+  
+  const normalizedUnit = unit.toLowerCase().trim();
+  return unitMap[normalizedUnit] || normalizedUnit;
+};
+
+const getUniqueItemsCount = (items: any[]): number => {
+  return new Set(
+    items.map(item => {
+      const normalizedName = normalizeIngredientName(item.name);
+      const normalizedUnit = normalizeUnit(item.unit);
+      return `${normalizedName}|${normalizedUnit || ''}`;
+    })
+  ).size;
+};
 
 const GroceryList = () => {
   const [lists, setLists] = useState<GroceryListType[]>([]);
@@ -20,9 +71,8 @@ const GroceryList = () => {
   const [editingListId, setEditingListId] = useState<string | null>(null);
   const [editedListName, setEditedListName] = useState('');
   const [collapsedLists, setCollapsedLists] = useState<Set<string>>(new Set());
-  const [sharingListId, setSharingListId] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState(false);
-  // Always aggregate ingredients by default
+  const [showShareModal, setShowShareModal] = useState(false);
   
   const fetchLists = async () => {
     setLoading(true);
@@ -219,12 +269,11 @@ const GroceryList = () => {
     }
   };
   
-  const handleShareList = async (listId: string) => {
-    setSharingListId(listId);
-    setShareSuccess(false);
+  const handleShareMultipleLists = async (listIds: string[], phoneNumber?: string) => {
+    setError(null);
     
     try {
-      await shareGroceryList(listId);
+      await shareMultipleGroceryLists(listIds, phoneNumber);
       setShareSuccess(true);
       
       // Reset after 3 seconds
@@ -232,10 +281,9 @@ const GroceryList = () => {
         setShareSuccess(false);
       }, 3000);
     } catch (err) {
-      console.error('Failed to share list:', err);
-      setError('Failed to share grocery list');
-    } finally {
-      setSharingListId(null);
+      console.error('Failed to share lists:', err);
+      setError('Failed to share grocery lists');
+      throw err;
     }
   };
   // Move renderLists definition above all conditional returns
@@ -261,46 +309,59 @@ const GroceryList = () => {
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold">Grocery Lists</h1>
             
-            <div className="create-list-container">
-              <button 
-                onClick={() => setShowInput(true)}
-                className={`btn btn-primary flex items-center create-list-button ${showInput ? 'hidden' : ''}`}
-              >
-                <FaPlus />
-              </button>
-              
-              <form onSubmit={handleCreateList} className={`create-list-form ${showInput ? 'visible' : ''}`}>
-                <input
-                  type="text"
-                  value={newListName}
-                  onChange={(e) => setNewListName(e.target.value)}
-                  placeholder="New list name"
-                  className="input mr-2 w-48"
-                  disabled={creatingList}
-                  autoFocus={showInput}
-                />
-                <div className="flex space-x-2">
-                  {newListName.trim() ? (
+            <div className="flex items-center gap-4">
+              <div className="create-list-container">
+                <button 
+                  onClick={() => setShowInput(true)}
+                  className={`btn btn-primary flex items-center create-list-button ${showInput ? 'hidden' : ''}`}
+                >
+                  <FaPlus />
+                </button>
+                
+                <form onSubmit={handleCreateList} className={`create-list-form ${showInput ? 'visible' : ''}`}>
+                  <input
+                    type="text"
+                    value={newListName}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    placeholder="New list name"
+                    className="input mr-2 w-48"
+                    disabled={creatingList}
+                    autoFocus={showInput}
+                  />
+                  <div className="flex space-x-2">
+                    {newListName.trim() ? (
+                      <button 
+                        type="submit" 
+                        className="text-primary hover:text-green-600 p-2"
+                        disabled={creatingList}
+                      >
+                        {creatingList ? <FaSpinner className="animate-spin" /> : <FaCheck />}
+                      </button>
+                    ) : null}
                     <button 
-                      type="submit" 
-                      className="text-primary hover:text-green-600 p-2"
-                      disabled={creatingList}
+                      type="button" 
+                      onClick={() => {
+                        setShowInput(false);
+                        setNewListName('');
+                      }}
+                      className="text-gray-500 hover:text-red-500 p-2"
                     >
-                      {creatingList ? <FaSpinner className="animate-spin" /> : <FaCheck />}
+                      <FaXmark size={18} />
                     </button>
-                  ) : null}
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      setShowInput(false);
-                      setNewListName('');
-                    }}
-                    className="text-gray-500 hover:text-red-500 p-2"
-                  >
-                    <FaXmark />
-                  </button>
-                </div>
-              </form>
+                  </div>
+                </form>
+              </div>
+              
+              {/* Share multiple lists button */}
+              {lists.length > 0 && (
+                <button 
+                  onClick={() => setShowShareModal(true)}
+                  className="btn btn-secondary flex items-center"
+                  title="Share multiple lists"
+                >
+                  <FaShareAlt />
+                </button>
+              )}
             </div>
           </div>
           
@@ -321,20 +382,20 @@ const GroceryList = () => {
                         className="bg-transparent text-white border border-white/50 px-2 py-1 rounded w-full mr-2 focus:outline-none focus:border-white"
                         autoFocus
                       />
-                      <div className="flex space-x-2">
+                      <div className="flex mr-2">
                         <button
                           onClick={() => handleSaveListName(list.id)}
-                          className="text-white hover:text-green-300 p-1"
+                          className="text-white hover:text-green-300 p-2"
                           title="Save list name"
                         >
-                          <FaCheck />
+                          <FaCheck size={14}/>
                         </button>
                         <button
                           onClick={() => setEditingListId(null)}
-                          className="text-white hover:text-red-300 p-1"
+                          className="text-white hover:text-red-300 p-2"
                           title="Cancel editing"
                         >
-                          <FaXmark />
+                          <FaXmark size={18}/>
                         </button>
                       </div>
                     </div>
@@ -342,44 +403,7 @@ const GroceryList = () => {
                     <h2 className="text-xl font-semibold flex items-center">
                       {list.name}
                       {(() => {
-                        // Calculate unique ingredients count after normalization
-                        const normalizeIngredientName = (name: string): string => {
-                          let normalized = name.toLowerCase();
-                          const prefixesToRemove = ['fresh ', 'dried ', 'frozen ', 'chopped '];
-                          const suffixesToRemove = [' leaves', ' bunch', ' bunches'];
-                          
-                          prefixesToRemove.forEach(prefix => {
-                            if (normalized.startsWith(prefix)) {
-                              normalized = normalized.slice(prefix.length);
-                            }
-                          });
-                          
-                          suffixesToRemove.forEach(suffix => {
-                            if (normalized.endsWith(suffix)) {
-                              normalized = normalized.slice(0, normalized.length - suffix.length);
-                            }
-                          });
-                          
-                          return normalized.trim();
-                        };
-                        
-                        const normalizeUnit = (unit: string | null): string | null => {
-                          if (!unit) return null;
-                          const unitMap: Record<string, string> = {
-                            'g': 'g', 'gm': 'g', 'gram': 'g', 'grams': 'g',
-                            'ml': 'ml', 'milliliter': 'ml', 'millilitre': 'ml'
-                          };
-                          const normalizedUnit = unit.toLowerCase().trim();
-                          return unitMap[normalizedUnit] || normalizedUnit;
-                        };
-                        
-                        const uniqueCount = new Set(
-                          list.items.map(item => {
-                            const normalizedName = normalizeIngredientName(item.name);
-                            const normalizedUnit = normalizeUnit(item.unit);
-                            return `${normalizedName}|${normalizedUnit || ''}`;
-                          })
-                        ).size;
+                        const uniqueCount = getUniqueItemsCount(list.items);
                         
                         if (uniqueCount !== list.items.length) {
                           return (
@@ -394,19 +418,6 @@ const GroceryList = () => {
                   )}
                 </div>
                 <div className="flex space-x-2 items-center">
-                  {editingListId !== list.id && (
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleShareList(list.id);
-                      }}
-                      disabled={sharingListId === list.id}
-                      className="text-white opacity-80 hover:opacity-100 p-1 transition-opacity"
-                      title="Share list via WhatsApp/SMS"
-                    >
-                      {sharingListId === list.id ? <FaSpinner className="animate-spin" /> : <FaShareAlt />}
-                    </button>
-                  )}
                   {list.name !== 'Master Grocery List' && editingListId !== list.id && (
                     <>
                       <button 
@@ -481,7 +492,17 @@ const GroceryList = () => {
     );
   }
 
-  return renderLists();
+  return (
+    <>
+      {renderLists()}
+      <ShareListsModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        lists={lists}
+        onShare={handleShareMultipleLists}
+      />
+    </>
+  );
 };
 
 export default GroceryList;
@@ -583,75 +604,6 @@ const DroppableList = ({ list, handleToggleItem, handleDeleteItem, handleMoveIte
       isOver: !!monitor.isOver()
     })
   });
-  
-  // Helper function to normalize ingredient names
-  const normalizeIngredientName = (name: string): string => {
-    // Convert to lowercase
-    let normalized = name.toLowerCase();
-    
-    // Remove common prefixes/suffixes
-    const prefixesToRemove = ['fresh ', 'dried ', 'frozen ', 'chopped ', 'sliced ', 'diced ', 'minced ', 'whole '];
-    const suffixesToRemove = [' leaves', ' bunch', ' bunches', ' stalk', ' stalks', ' sprig', ' sprigs', ' clove', ' cloves'];
-    
-    prefixesToRemove.forEach(prefix => {
-      if (normalized.startsWith(prefix)) {
-        normalized = normalized.slice(prefix.length);
-      }
-    });
-    
-    suffixesToRemove.forEach(suffix => {
-      if (normalized.endsWith(suffix)) {
-        normalized = normalized.slice(0, normalized.length - suffix.length);
-      }
-    });
-    
-    return normalized.trim();
-  };
-  
-  // Helper function to normalize units
-  const normalizeUnit = (unit: string | null): string | null => {
-    if (!unit) return null;
-    
-    const unitMap: Record<string, string> = {
-      'g': 'g',
-      'gm': 'g',
-      'gram': 'g',
-      'grams': 'g',
-      'kg': 'kg',
-      'kilo': 'kg',
-      'kilos': 'kg',
-      'kilogram': 'kg',
-      'kilograms': 'kg',
-      'ml': 'ml',
-      'milliliter': 'ml',
-      'milliliters': 'ml',
-      'millilitre': 'ml',
-      'millilitres': 'ml',
-      'l': 'l',
-      'liter': 'l',
-      'liters': 'l',
-      'litre': 'l',
-      'litres': 'l',
-      'oz': 'oz',
-      'ounce': 'oz',
-      'ounces': 'oz',
-      'lb': 'lb',
-      'lbs': 'lb',
-      'pound': 'lb',
-      'pounds': 'lb',
-      'tbsp': 'tbsp',
-      'tablespoon': 'tbsp',
-      'tablespoons': 'tbsp',
-      'tsp': 'tsp',
-      'teaspoon': 'tsp',
-      'teaspoons': 'tsp',
-      'cup': 'cup',
-      'cups': 'cup'
-    };
-    
-    const normalizedUnit = unit.toLowerCase().trim();
-    return unitMap[normalizedUnit] || normalizedUnit;
-  };
   
   // Always aggregate ingredients with normalized names and units
   const aggregatedItems = useMemo(() => {

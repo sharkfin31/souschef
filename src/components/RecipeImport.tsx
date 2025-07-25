@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FaSpinner, FaLink, FaImage, FaCheck, FaArrowUp, FaArrowDown, FaExclamationCircle } from 'react-icons/fa';
 import { Recipe } from '../types/recipe';
-import { extractRecipeFromUrl, extractRecipeFromMultipleImages } from '../services/apiService';
+import { extractRecipeFromUrl, extractRecipeFromMultipleImages } from '../services/api/recipeApi';
 
 interface RecipeImportProps {
   onRecipeImported: (recipe: Recipe) => void;
@@ -159,12 +159,12 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
               id="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Paste Instagram or website URL"
+              placeholder="Paste recipe URL (Instagram, Food Network, AllRecipes, etc.)"
               className="input w-full"
               disabled={loading}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Works best with Instagram posts that have recipe details in the caption
+              Supports Instagram posts, recipe websites, and blogs with recipe content
             </p>
           </div>
           
@@ -184,7 +184,7 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
                 Recipe Imported!
               </span>
             ) : (
-              'Import Recipe'
+              'Import'
             )}
           </button>
         </form>

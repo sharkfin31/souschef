@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getRecipeById, updateRecipeTags, updateRecipeTitle } from '../services/recipeService';
-import { getMasterGroceryList, addIngredientsToList } from '../services/groceryService';
+import { getRecipeById, updateRecipeTags, updateRecipeTitle } from '../services/recipe/recipeService';
+import { getMasterGroceryList, addIngredientsToList } from '../services/grocery/groceryService';
 import { Recipe } from '../types/recipe';
-import { FaArrowLeft, FaClock, FaUtensils, FaSpinner, FaShoppingBasket, FaInstagram, FaImage, FaLink, FaMinus, FaPlus, FaTags, FaSave } from 'react-icons/fa';
+import { FaArrowLeft, FaClock, FaUtensils, FaSpinner, FaShoppingBasket, FaInstagram, FaImage, FaLink, FaMinus, FaPlus, FaTags } from 'react-icons/fa';
 import { FaPen, FaCheck, FaXmark } from "react-icons/fa6"; 
 import '../assets/list-animations.css';
 import '../assets/grocery-animations.css';
@@ -525,7 +525,7 @@ const RecipeDetail = () => {
                       />
                     </div>
                     
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-1">
                       {newTag.trim() ? (
                         <button 
                           type="submit" 
@@ -545,7 +545,7 @@ const RecipeDetail = () => {
                         disabled={updatingTags}
                         title="Save tags (Ctrl+Enter)"
                       >
-                        {updatingTags ? <FaSpinner className="animate-spin" /> : <FaSave />}
+                        {updatingTags ? <FaSpinner className="animate-spin" /> : <FaCheck />}
                       </button>
                       <button 
                         type="button" 
