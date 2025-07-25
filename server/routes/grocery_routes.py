@@ -1,3 +1,12 @@
+"""
+Grocery Routes - API endpoints for grocery list management and sharing
+
+This module handles grocery list operations including:
+- Sharing grocery lists via WhatsApp/SMS
+- Formatting lists for different messaging platforms
+- Multiple list sharing functionality
+"""
+
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
 from typing import List, Optional
@@ -6,19 +15,27 @@ import requests
 import urllib
 import smtplib
 from email.message import EmailMessage
+
+# Local imports
 from config import senderEmail, gatewayAddress, APP_KEY
+from utils.constants import Messages, StatusCodes
+from utils.helpers import setup_logger, format_error_response, format_success_response
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
+# Setup logging
+logger = setup_logger(__name__)
+
 router = APIRouter(prefix="/api", tags=["grocery"])
 
-# Get WhatsApp API key from environment variables
+# Get messaging service configuration from environment
 WHATSAPP_API_KEY = os.getenv("WHATSAPP_API_KEY")
 WHATSAPP_PHONE_NUMBER = os.getenv("WHATSAPP_PHONE_NUMBER")
 
 class GroceryItem(BaseModel):
+    """Model for individual grocery list items"""
     id: Optional[str] = None
     name: str
     quantity: Optional[str] = None
@@ -27,17 +44,20 @@ class GroceryItem(BaseModel):
     recipeTitle: Optional[str] = None
 
 class ShareListRequest(BaseModel):
+    """Model for sharing a single grocery list"""
     listId: str
     listName: str
     items: List[GroceryItem]
     phoneNumber: Optional[str] = None
 
 class ListToShare(BaseModel):
+    """Model for lists in multi-list sharing"""
     listId: str
     listName: str
     items: List[GroceryItem]
     
 class ShareMultipleListsRequest(BaseModel):
+    """Model for sharing multiple grocery lists"""
     lists: List[ListToShare]
     phoneNumber: Optional[str] = None
 
@@ -45,8 +65,13 @@ class ShareMultipleListsRequest(BaseModel):
 async def share_grocery_list(request: ShareListRequest = Body(...)):
     """
     Share a grocery list via WhatsApp/SMS
+    
+    Formats and sends a grocery list to the specified phone number
+    using available messaging services (WhatsApp API or SMS gateway).
     """
     try:
+        logger.info(f"Sharing grocery list '{request.listName}' to {request.phoneNumber}")
+        
         # Format the grocery list as text
         message = f"🛒 *{request.listName}*\n\n"
         incomplete_items = [item for item in request.items if not item.completed]

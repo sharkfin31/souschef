@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { getRecipes } from '../services/recipe/recipeService';
 import { useAuth } from '../context/AuthContext';
 import { Recipe } from '../types/recipe';
 import RecipeCard from '../components/RecipeCard';
 import RecipeImport from '../components/RecipeImport';
-import { FaFilter, FaSearch, FaClock, FaTimes, FaPlus, FaSort, FaCheck, FaChevronUp, FaChevronDown, FaTags, FaSpinner, FaExclamationTriangle, FaUtensils } from 'react-icons/fa';
+import { FaFilter, FaSearch, FaClock, FaTimes, FaPlus, FaCheck, FaChevronUp, FaChevronDown, FaTags, FaSpinner, FaExclamationTriangle, FaUtensils } from 'react-icons/fa';
 
 const Home = () => {
   const { user } = useAuth();
