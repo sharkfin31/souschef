@@ -1,3 +1,10 @@
+"""
+Image Service - OCR-based recipe extraction from uploaded images
+
+This service handles image upload, validation, OCR processing, and 
+AI-powered recipe extraction from image content.
+"""
+
 import uuid
 import shutil
 import sys
@@ -9,20 +16,23 @@ from typing import List, Dict, Any, Tuple, Optional
 from PIL import Image
 import pytesseract
 from fastapi import UploadFile, HTTPException, BackgroundTasks
+
+# Local imports
 from services.ai_service import process_with_ai
 from services.db_service import save_recipe_to_db
 from config import UPLOAD_DIR
+from utils.constants import FileConfig, OCRConfig, Messages, StatusCodes
+from utils.helpers import setup_logger, generate_unique_id, sanitize_filename
 
-# Constants
-MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"}
-OCR_CONFIG = "--oem 3 --psm 6"  # Optimized OCR configuration
+# Setup logging
+logger = setup_logger(__name__)
 
 def check_tesseract_installed() -> bool:
     """Check if Tesseract is installed and accessible"""
     try:
         # On Render deployment, assume Tesseract is available
         if os.environ.get('RENDER') == 'true':
+            logger.info("Running on Render - assuming Tesseract is available")
             return True
             
         # Check local installation
@@ -32,23 +42,27 @@ def check_tesseract_installed() -> bool:
         if result.returncode == 0:
             # Verify Tesseract works by checking version
             version_result = subprocess.run(['tesseract', '--version'], capture_output=True, text=True)
+            logger.info(f"Tesseract found: {version_result.stdout.split()[1] if version_result.stdout else 'unknown version'}")
             return version_result.returncode == 0
         
+        logger.warning("Tesseract not found in PATH")
         return False
         
     except Exception as e:
-        print(f"Error checking Tesseract installation: {e}")
+        logger.error(f"Error checking Tesseract installation: {e}")
         return False
 
-
 def validate_image_file(image: UploadFile) -> bool:
-    """Validate uploaded image file"""
+    """Validate uploaded image file against size and format constraints"""
     # Check file extension
     if not image.filename:
+        logger.warning("Image file has no filename")
+        logger.warning("Image file has no filename")
         return False
         
     file_ext = Path(image.filename).suffix.lower()
-    if file_ext not in ALLOWED_EXTENSIONS:
+    if file_ext not in FileConfig.ALLOWED_IMAGE_EXTENSIONS:
+        logger.warning(f"Unsupported file extension: {file_ext}")
         return False
     
     # Check file size (reset position after checking)
@@ -56,20 +70,24 @@ def validate_image_file(image: UploadFile) -> bool:
     file_size = image.file.tell()
     image.file.seek(0)  # Reset to beginning
     
-    return file_size <= MAX_IMAGE_SIZE
-
+    if file_size > FileConfig.MAX_IMAGE_SIZE:
+        logger.warning(f"File too large: {file_size} bytes (max: {FileConfig.MAX_IMAGE_SIZE})")
+        return False
+    
+    return True
 
 async def extract_text_from_image(image_path: Path) -> str:
-    """Extract text from an image using OCR with error handling"""
+    """Extract text from an image using OCR with comprehensive error handling"""
     try:
         # Verify file exists and is readable
         if not image_path.exists():
-            print(f"Image file not found: {image_path}")
+            logger.error(f"Image file not found: {image_path}")
             return ""
         
         # Open and process image
         with Image.open(image_path) as img:
             # Convert to RGB if necessary (for PNG with transparency, etc.)
+            # Convert to RGB if necessary for better OCR results
             if img.mode in ('RGBA', 'LA', 'P'):
                 background = Image.new('RGB', img.size, (255, 255, 255))
                 if img.mode == 'P':
@@ -78,15 +96,14 @@ async def extract_text_from_image(image_path: Path) -> str:
                 img = background
             
             # Extract text with optimized configuration
-            text = pytesseract.image_to_string(img, config=OCR_CONFIG)
+            text = pytesseract.image_to_string(img, config=OCRConfig.CONFIG)
             
-        print(f"OCR completed for {image_path.name}: {len(text)} characters extracted")
-        return text.strip()
+            logger.info(f"OCR completed for {image_path.name}: {len(text)} characters extracted")
+            return text.strip()
         
     except Exception as e:
-        print(f"Error extracting text from {image_path}: {e}")
+        logger.error(f"Error extracting text from {image_path}: {e}")
         return ""
-
 
 def cleanup_file(file_path: Path) -> None:
     """Safely delete a file after processing"""

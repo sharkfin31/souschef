@@ -1,13 +1,27 @@
+# Core FastAPI dependencies
 fastapi==0.95.0
 uvicorn==0.21.1
-python-dotenv==0.19.0
+python-multipart==0.0.6
 pydantic==1.10.7
+
+# Environment and configuration
+python-dotenv==0.19.0
+
+# HTTP and networking
 httpx>=0.23.0,<0.24.0
+requests==2.31.0
+
+# Database and authentication
 supabase==1.0.3
+PyJWT==2.8.0
+
+# Social media integration
 instaloader==4.9.5
+
+# Image processing and OCR
 pillow==9.5.0
 pytesseract==0.3.10
-python-multipart==0.0.6
+
+# Web scraping and parsing
 beautifulsoup4==4.12.2
 lxml==4.9.2
-PyJWT==2.8.0
