@@ -86,7 +86,7 @@ const generateRecipeTags = (recipe: any): string[] => {
 };
 
 /**
- * Extract recipe from URL (Instagram or website)
+ * Extract recipe from URL (Instagram, website, or any supported URL)
  */
 export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
   const response = await apiClient.post('/extract', { 
@@ -103,22 +103,22 @@ export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
   // Generate tags based on recipe content
   const tags = generateRecipeTags(response);
   
-  // Format the recipe data for our app
+  // Format the recipe data for our app (handle both Instagram and web URL responses)
   return {
     id: response.recipe_id,
     title: response.title,
     description: response.description || '',
-    sourceUrl: response.post_url,
+    sourceUrl: response.source_url || response.post_url || '',
     imageUrl: response.image_url,
     ingredients: response.ingredients.map((ing: any) => processIngredient(ing, response.recipe_id)),
     instructions: response.instructions.map((inst: any) => ({
       id: crypto.randomUUID(),
       recipeId: response.recipe_id,
-      stepNumber: inst.stepNumber,
+      stepNumber: inst.stepNumber || inst.step_number,
       description: inst.description
     })),
-    prepTime: response.prepTime ?? null,
-    cookTime: response.cookTime ?? null,
+    prepTime: response.prep_time ?? response.prepTime ?? null,
+    cookTime: response.cook_time ?? response.cookTime ?? null,
     servings: response.servings ?? null,
     tags,
     createdAt: new Date().toISOString()

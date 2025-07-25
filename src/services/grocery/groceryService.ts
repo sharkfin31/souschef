@@ -82,9 +82,17 @@ const getIngredientKey = (name: string, unit: string | null) => {
  * Get all grocery lists
  */
 export const getGroceryLists = async (): Promise<GroceryList[]> => {
+  // Get the current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User must be authenticated to access grocery lists');
+  }
+
   const { data, error } = await supabase
     .from('grocery_lists')
     .select('*')
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false });
   
   if (error) {
@@ -124,10 +132,18 @@ export const getGroceryLists = async (): Promise<GroceryList[]> => {
  * Get a grocery list by ID
  */
 export const getGroceryListById = async (id: string): Promise<GroceryList> => {
+  // Get the current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User must be authenticated to access grocery lists');
+  }
+
   const { data, error } = await supabase
     .from('grocery_lists')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user.id)
     .single();
   
   if (error) {
@@ -180,11 +196,19 @@ export const getGroceryItemsByListId = async (listId: string): Promise<GroceryIt
  * Get or create the master grocery list
  */
 export const getMasterGroceryList = async (): Promise<GroceryList> => {
-  // Check if master list exists (using name as identifier)
+  // Get the current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User must be authenticated to access grocery lists');
+  }
+
+  // Check if master list exists for this user
   const { data, error } = await supabase
     .from('grocery_lists')
     .select('*')
     .eq('name', 'Master Grocery List')
+    .eq('user_id', user.id)
     .limit(1);
   
   if (error) {
@@ -211,7 +235,7 @@ export const getMasterGroceryList = async (): Promise<GroceryList> => {
     .insert({
       id: masterListId,
       name: 'Master Grocery List',
-      user_id: 'anonymous'
+      user_id: user.id
     });
   
   if (createError) {
@@ -234,12 +258,19 @@ export const getMasterGroceryList = async (): Promise<GroceryList> => {
 export const createCustomList = async (name: string): Promise<GroceryList> => {
   const listId = uuidv4();
   
+  // Get the current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User must be authenticated to create grocery lists');
+  }
+  
   const { error } = await supabase
     .from('grocery_lists')
     .insert({
       id: listId,
       name,
-      user_id: 'anonymous'
+      user_id: user.id
     });
   
   if (error) {
@@ -463,6 +494,26 @@ export const addIngredientsToList = async (
  * Delete a grocery list
  */
 export const deleteGroceryList = async (listId: string): Promise<void> => {
+  // Get the current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User must be authenticated to delete grocery lists');
+  }
+
+  // Verify the list belongs to the user before deleting
+  const { data: listData, error: verifyError } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('id', listId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (verifyError || !listData) {
+    console.error('Error verifying list ownership:', verifyError);
+    throw new Error('List not found or access denied');
+  }
+
   // First delete all items in the list
   const { error: itemsError } = await supabase
     .from('grocery_items')
@@ -503,10 +554,18 @@ export const deleteGroceryItem = async (itemId: string): Promise<void> => {
  * Update a grocery list name
  */
 export const updateGroceryListName = async (listId: string, name: string): Promise<void> => {
+  // Get the current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User must be authenticated to update grocery lists');
+  }
+
   const { error } = await supabase
     .from('grocery_lists')
     .update({ name })
-    .eq('id', listId);
+    .eq('id', listId)
+    .eq('user_id', user.id);
   
   if (error) {
     console.error('Error updating grocery list name:', error);
@@ -543,5 +602,39 @@ export const shareGroceryList = async (listId: string, phoneNumber?: string): Pr
   } catch (err) {
     console.error('Error sharing grocery list:', err);
     throw new Error('Failed to share grocery list');
+  }
+};
+
+/**
+ * Share multiple grocery lists via WhatsApp/SMS
+ */
+export const shareMultipleGroceryLists = async (listIds: string[], phoneNumber?: string): Promise<void> => {
+  try {
+    // Get all lists with their items
+    const lists = await Promise.all(listIds.map(id => getGroceryListById(id)));
+    
+    // Call the backend API to send the message
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/share-multiple-lists`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        lists: lists.map(list => ({
+          listId: list.id,
+          listName: list.name,
+          items: list.items
+        })),
+        phoneNumber
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to share grocery lists');
+    }
+  } catch (err) {
+    console.error('Error sharing grocery lists:', err);
+    throw new Error('Failed to share grocery lists');
   }
 };

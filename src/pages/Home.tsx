@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { getRecipes } from '../services/recipe/recipeService';
+import { useAuth } from '../context/AuthContext';
+import { Recipe } from '../types/recipe';
 import RecipeCard from '../components/RecipeCard';
 import RecipeImport from '../components/RecipeImport';
-import { getRecipes } from '../services/recipeService';
-import { Recipe } from '../types/recipe';
-import { FaSpinner, FaPlus, FaTimes, FaCheck, FaExclamationTriangle, FaUtensils, FaFilter, FaTags, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { FaFilter, FaSearch, FaClock, FaTimes, FaPlus, FaSort, FaCheck, FaChevronUp, FaChevronDown, FaTags, FaSpinner, FaExclamationTriangle, FaUtensils } from 'react-icons/fa';
 
 const Home = () => {
+  const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +18,10 @@ const Home = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'date' | 'cookTime'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [timeFilter, setTimeFilter] = useState<'all' | 'quick' | 'medium' | 'long'>('all');
   const filterRef = useRef<HTMLDivElement>(null);
   
   const fetchRecipes = async () => {
@@ -52,17 +59,60 @@ const Home = () => {
     }, 3000);
   };
   
-  // Filter recipes when selected tags change
+  // Enhanced filtering and sorting logic
   useEffect(() => {
-    if (selectedTags.length === 0) {
-      setFilteredRecipes(recipes);
-    } else {
-      const filtered = recipes.filter(recipe => 
+    let filtered = [...recipes];
+    
+    // Text search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(recipe => 
+        recipe.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (recipe.description && recipe.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    }
+    
+    // Tag filter
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(recipe => 
         selectedTags.every(tag => recipe.tags?.includes(tag))
       );
-      setFilteredRecipes(filtered);
     }
-  }, [selectedTags, recipes]);
+    
+    // Time filter
+    if (timeFilter !== 'all') {
+      filtered = filtered.filter(recipe => {
+        const cookTime = recipe.cookTime || 0;
+        switch (timeFilter) {
+          case 'quick': return cookTime <= 30;
+          case 'medium': return cookTime > 30 && cookTime <= 60;
+          case 'long': return cookTime > 60;
+          default: return true;
+        }
+      });
+    }
+    
+    // Sort recipes
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'name':
+          comparison = a.title.localeCompare(b.title);
+          break;
+        case 'cookTime':
+          comparison = (a.cookTime || 0) - (b.cookTime || 0);
+          break;
+        case 'date':
+        default:
+          comparison = new Date(a.createdAt || '').getTime() - new Date(b.createdAt || '').getTime();
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+    
+    setFilteredRecipes(filtered);
+  }, [searchQuery, selectedTags, timeFilter, sortBy, sortOrder, recipes]);
   
   useEffect(() => {
     fetchRecipes();
@@ -90,6 +140,16 @@ const Home = () => {
         : [...prev, tag]
     );
   };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedTags([]);
+    setSearchQuery('');
+    setTimeFilter('all');
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = selectedTags.length > 0 || searchQuery.trim() || timeFilter !== 'all';
   
   return (
     <div>
@@ -113,36 +173,156 @@ const Home = () => {
             </button>
             <RecipeImport onRecipeImported={handleRecipeImported} />
           </div>
-        ) : (
+        ) : user ? (
           <button
             onClick={() => setShowImport(true)}
             className="btn btn-primary flex items-center justify-center w-full md:w-auto mx-auto">
             <FaPlus className="mr-2" />
             Import New Recipe
           </button>
+        ) : (
+          <div className="text-center">
+            <p className="text-gray-600 mb-4">Please log in to import recipes</p>
+          </div>
         )}
       </div>
       
+      {/* Search and Filter Section */}
+      <div className="mb-6 space-y-4">
+        {/* Search Bar */}
+        <div className="relative">
+          <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search recipes by name or description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <FaTimes />
+            </button>
+          )}
+        </div>
+
+        {/* Quick Filter Pills */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm font-medium text-gray-700">Quick filters:</span>
+          
+          {/* Time filters */}
+          <button
+            onClick={() => setTimeFilter(timeFilter === 'quick' ? 'all' : 'quick')}
+            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
+              timeFilter === 'quick'
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
+            }`}
+          >
+            <FaClock className="inline mr-1" size={12} />
+            Quick (≤30 min)
+          </button>
+          
+          <button
+            onClick={() => setTimeFilter(timeFilter === 'medium' ? 'all' : 'medium')}
+            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
+              timeFilter === 'medium'
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
+            }`}
+          >
+            <FaClock className="inline mr-1" size={12} />
+            Medium (30-60 min)
+          </button>
+          
+          <button
+            onClick={() => setTimeFilter(timeFilter === 'long' ? 'all' : 'long')}
+            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
+              timeFilter === 'long'
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
+            }`}
+          >
+            <FaClock className="inline mr-1" size={12} />
+            Long (&gt;60 min)
+          </button>
+
+          {/* Clear filters button */}
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="px-3 py-1 text-sm text-red-600 hover:text-red-800 border border-red-300 rounded-full hover:border-red-500 transition-colors"
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Recipes Section */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4">
         <h2 className="text-xl font-semibold">Your Recipes</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">{filteredRecipes.length} of {recipes.length} recipes</span>
+        <div className="flex items-center gap-4">
+          {/* Results count and active filters summary */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-gray-600">
+            <span>{filteredRecipes.length} of {recipes.length} recipes</span>
+            {hasActiveFilters && (
+              <span className="text-primary">
+                • {selectedTags.length > 0 && `${selectedTags.length} tag${selectedTags.length > 1 ? 's' : ''}`}
+                {selectedTags.length > 0 && (searchQuery || timeFilter !== 'all') && ', '}
+                {searchQuery && 'search'}
+                {searchQuery && timeFilter !== 'all' && ', '}
+                {timeFilter !== 'all' && `${timeFilter} time`}
+              </span>
+            )}
+          </div>
+          
+          {/* Sort dropdown */}
+          <select
+            value={`${sortBy}-${sortOrder}`}
+            onChange={(e) => {
+              const [newSortBy, newSortOrder] = e.target.value.split('-') as ['name' | 'date' | 'cookTime', 'asc' | 'desc'];
+              setSortBy(newSortBy);
+              setSortOrder(newSortOrder);
+            }}
+            className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="date-desc">Newest first</option>
+            <option value="date-asc">Oldest first</option>
+            <option value="name-asc">Name A-Z</option>
+            <option value="name-desc">Name Z-A</option>
+            <option value="cookTime-asc">Quick to cook</option>
+            <option value="cookTime-desc">Long to cook</option>
+          </select>
+          
+          {/* Advanced filter toggle */}
           <div className="relative" ref={filterRef}>
             <button 
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:bg-gray-50"
-              title="Filter recipes"
+              className={`flex items-center text-sm px-3 py-1.5 border rounded-md transition-colors ${
+                selectedTags.length > 0 
+                  ? 'border-primary bg-primary text-white' 
+                  : 'border-gray-300 bg-white hover:bg-gray-50'
+              }`}
+              title="Advanced filters"
             >
               <FaFilter className="mr-1.5" />
-              Filter
+              Tags
+              {selectedTags.length > 0 && (
+                <span className="ml-1 bg-white text-primary rounded-full px-1.5 py-0.5 text-xs font-medium">
+                  {selectedTags.length}
+                </span>
+              )}
               {showFilters ? <FaChevronUp className="ml-1.5" size={12} /> : <FaChevronDown className="ml-1.5" size={12} />}
             </button>
             
-            {/* Dropdown Filter Menu */}
+            {/* Advanced Tag Filters Dropdown */}
             {showFilters && availableTags.length > 0 && (
-              <div className="absolute right-0 mt-1 w-64 bg-white rounded-md shadow-lg z-10 py-2 px-3">
-                <div className="flex items-center justify-between border-b pb-2 mb-2">
+              <div className="absolute right-0 mt-1 w-80 bg-white rounded-md shadow-lg z-10 py-3 px-4 max-h-96 overflow-y-auto">
+                <div className="flex items-center justify-between border-b pb-2 mb-3">
                   <h3 className="font-medium text-sm flex items-center">
                     <FaTags className="mr-1.5 text-gray-500" />
                     Filter by Tags
@@ -150,110 +330,136 @@ const Home = () => {
                   {selectedTags.length > 0 && (
                     <button 
                       onClick={() => setSelectedTags([])} 
-                      className="text-xs text-gray-500 hover:text-primary"
+                      className="text-xs text-red-600 hover:text-red-800"
                     >
-                      Clear all
+                      Clear tags
                     </button>
                   )}
                 </div>
                 
                 {/* Cuisine tags */}
-                <div className="mb-3">
-                  <h4 className="text-xs font-medium mb-1.5 text-gray-500">Cuisine</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableTags
-                      .filter(tag => [
-                        'Italian', 'Mexican', 'Chinese', 'Indian', 'Japanese', 'Thai', 
-                        'Mediterranean', 'French', 'Greek', 'Spanish', 'Korean', 'Vietnamese',
-                        'American', 'Middle Eastern', 'Caribbean', 'African'
-                      ].includes(tag))
-                      .map(tag => (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={`px-2 py-0.5 text-xs rounded-full ${selectedTags.includes(tag) 
-                            ? 'bg-primary text-white' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
+                {availableTags.some(tag => [
+                  'Italian', 'Mexican', 'Chinese', 'Indian', 'Japanese', 'Thai', 
+                  'Mediterranean', 'French', 'Greek', 'Spanish', 'Korean', 'Vietnamese',
+                  'American', 'Middle Eastern', 'Caribbean', 'African'
+                ].includes(tag)) && (
+                  <div className="mb-3">
+                    <h4 className="text-xs font-medium mb-2 text-gray-500 uppercase tracking-wide">Cuisine</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableTags
+                        .filter(tag => [
+                          'Italian', 'Mexican', 'Chinese', 'Indian', 'Japanese', 'Thai', 
+                          'Mediterranean', 'French', 'Greek', 'Spanish', 'Korean', 'Vietnamese',
+                          'American', 'Middle Eastern', 'Caribbean', 'African'
+                        ].includes(tag))
+                        .map(tag => (
+                          <button
+                            key={tag}
+                            onClick={() => toggleTag(tag)}
+                            className={`px-2.5 py-1 text-xs rounded-full transition-colors ${selectedTags.includes(tag) 
+                              ? 'bg-primary text-white shadow-sm' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                    </div>
                   </div>
-                </div>
+                )}
                 
                 {/* Dietary tags */}
-                <div className="mb-3">
-                  <h4 className="text-xs font-medium mb-1.5 text-gray-500">Dietary</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableTags
-                      .filter(tag => [
-                        'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 
-                        'Low-Carb', 'Paleo', 'Pescatarian', 'Nut-Free', 'Egg-Free'
-                      ].includes(tag))
-                      .map(tag => (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={`px-2 py-0.5 text-xs rounded-full ${selectedTags.includes(tag) 
-                            ? 'bg-primary text-white' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
+                {availableTags.some(tag => [
+                  'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 
+                  'Low-Carb', 'Paleo', 'Pescatarian', 'Nut-Free', 'Egg-Free'
+                ].includes(tag)) && (
+                  <div className="mb-3">
+                    <h4 className="text-xs font-medium mb-2 text-gray-500 uppercase tracking-wide">Dietary</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableTags
+                        .filter(tag => [
+                          'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 
+                          'Low-Carb', 'Paleo', 'Pescatarian', 'Nut-Free', 'Egg-Free'
+                        ].includes(tag))
+                        .map(tag => (
+                          <button
+                            key={tag}
+                            onClick={() => toggleTag(tag)}
+                            className={`px-2.5 py-1 text-xs rounded-full transition-colors ${selectedTags.includes(tag) 
+                              ? 'bg-primary text-white shadow-sm' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                    </div>
                   </div>
-                </div>
+                )}
                 
                 {/* Meal type tags */}
-                <div className="mb-3">
-                  <h4 className="text-xs font-medium mb-1.5 text-gray-500">Meal Type</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableTags
-                      .filter(tag => [
-                        'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack', 'Appetizer', 
-                        'Side Dish', 'Soup', 'Salad', 'Drink', 'Baking'
-                      ].includes(tag))
-                      .map(tag => (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={`px-2 py-0.5 text-xs rounded-full ${selectedTags.includes(tag) 
-                            ? 'bg-primary text-white' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
+                {availableTags.some(tag => [
+                  'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack', 'Appetizer', 
+                  'Side Dish', 'Soup', 'Salad', 'Drink', 'Baking'
+                ].includes(tag)) && (
+                  <div className="mb-3">
+                    <h4 className="text-xs font-medium mb-2 text-gray-500 uppercase tracking-wide">Meal Type</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableTags
+                        .filter(tag => [
+                          'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack', 'Appetizer', 
+                          'Side Dish', 'Soup', 'Salad', 'Drink', 'Baking'
+                        ].includes(tag))
+                        .map(tag => (
+                          <button
+                            key={tag}
+                            onClick={() => toggleTag(tag)}
+                            className={`px-2.5 py-1 text-xs rounded-full transition-colors ${selectedTags.includes(tag) 
+                              ? 'bg-primary text-white shadow-sm' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                    </div>
                   </div>
-                </div>
+                )}
                 
                 {/* Other tags */}
-                <div>
-                  <h4 className="text-xs font-medium mb-1.5 text-gray-500">Other Tags</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableTags
-                      .filter(tag => ![
-                        'Italian', 'Mexican', 'Chinese', 'Indian', 'Japanese', 'Thai', 
-                        'Mediterranean', 'French', 'Greek', 'Spanish', 'Korean', 'Vietnamese',
-                        'American', 'Middle Eastern', 'Caribbean', 'African',
-                        'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 
-                        'Low-Carb', 'Paleo', 'Pescatarian', 'Nut-Free', 'Egg-Free',
-                        'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack', 'Appetizer', 
-                        'Side Dish', 'Soup', 'Salad', 'Drink', 'Baking'
-                      ].includes(tag))
-                      .map(tag => (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={`px-2 py-0.5 text-xs rounded-full ${selectedTags.includes(tag) 
-                            ? 'bg-primary text-white' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
+                {availableTags.filter(tag => ![
+                  'Italian', 'Mexican', 'Chinese', 'Indian', 'Japanese', 'Thai', 
+                  'Mediterranean', 'French', 'Greek', 'Spanish', 'Korean', 'Vietnamese',
+                  'American', 'Middle Eastern', 'Caribbean', 'African',
+                  'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 
+                  'Low-Carb', 'Paleo', 'Pescatarian', 'Nut-Free', 'Egg-Free',
+                  'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack', 'Appetizer', 
+                  'Side Dish', 'Soup', 'Salad', 'Drink', 'Baking'
+                ].includes(tag)).length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-medium mb-2 text-gray-500 uppercase tracking-wide">Other</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableTags
+                        .filter(tag => ![
+                          'Italian', 'Mexican', 'Chinese', 'Indian', 'Japanese', 'Thai', 
+                          'Mediterranean', 'French', 'Greek', 'Spanish', 'Korean', 'Vietnamese',
+                          'American', 'Middle Eastern', 'Caribbean', 'African',
+                          'Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 
+                          'Low-Carb', 'Paleo', 'Pescatarian', 'Nut-Free', 'Egg-Free',
+                          'Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack', 'Appetizer', 
+                          'Side Dish', 'Soup', 'Salad', 'Drink', 'Baking'
+                        ].includes(tag))
+                        .map(tag => (
+                          <button
+                            key={tag}
+                            onClick={() => toggleTag(tag)}
+                            className={`px-2.5 py-1 text-xs rounded-full transition-colors ${selectedTags.includes(tag) 
+                              ? 'bg-primary text-white shadow-sm' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -274,19 +480,33 @@ const Home = () => {
           <div className="bg-white rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 shadow-sm">
             <FaUtensils className="text-gray-400 text-2xl" />
           </div>
-          <p className="text-gray-600 mb-2 font-medium">You don't have any recipes yet.</p>
-          <p className="text-gray-500 mb-4">
-            Import your first recipe to get started.
-          </p>
+          {user ? (
+            <>
+              <p className="text-gray-600 mb-2 font-medium">You don't have any recipes yet.</p>
+              <p className="text-gray-500 mb-4">
+                Import your first recipe to get started.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-600 mb-2 font-medium">Please log in to view your recipes.</p>
+              <p className="text-gray-500 mb-4">
+                Sign in to save and manage your personal recipe collection.
+              </p>
+            </>
+          )}
         </div>
       ) : filteredRecipes.length === 0 ? (
         <div className="bg-gray-50 p-8 rounded-md text-center">
-          <p className="text-gray-600 mb-2 font-medium">No recipes match your selected filters.</p>
+          <p className="text-gray-600 mb-2 font-medium">No recipes match your current filters.</p>
+          <p className="text-gray-500 mb-4">
+            Try adjusting your search or filter criteria.
+          </p>
           <button
-            onClick={() => setSelectedTags([])}
-            className="btn btn-secondary inline-flex items-center mt-2"
+            onClick={clearAllFilters}
+            className="btn btn-secondary inline-flex items-center"
           >
-            Clear Filters
+            Clear All Filters
           </button>
         </div>
       ) : (

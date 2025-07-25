@@ -1,11 +1,56 @@
 import { supabase } from '../../lib/supabase';
 import { Recipe, ParsedRecipe, Ingredient, Instruction } from '../../types/recipe';
 import { v4 as uuidv4 } from 'uuid';
+import { apiClient } from '../api/apiClient';
 
 /**
- * Get all recipes
+ * Get all recipes for the current user
  */
 export const getRecipes = async (): Promise<Recipe[]> => {
+  try {
+    // Try to get recipes from the backend API (which handles user authentication)
+    const response = await apiClient.get('/recipes');
+    
+    if (response.user_specific && response.recipes) {
+      // Backend returned user-specific recipes, format them for the frontend
+      const recipesWithDetails = await Promise.all(
+        response.recipes.map(async (recipe: any) => {
+          const ingredients = await getIngredientsByRecipeId(recipe.id);
+          const instructions = await getInstructionsByRecipeId(recipe.id);
+          
+          return {
+            id: recipe.id,
+            title: recipe.title,
+            description: recipe.description,
+            sourceUrl: recipe.source_url,
+            imageUrl: recipe.image_url,
+            prepTime: recipe.prep_time,
+            cookTime: recipe.cook_time,
+            servings: recipe.servings,
+            ingredients,
+            instructions,
+            tags: recipe.tags || [],
+            createdAt: recipe.created_at
+          };
+        })
+      );
+      
+      return recipesWithDetails;
+    } else {
+      // Fallback to direct Supabase query for backward compatibility
+      return await getRecipesFromSupabase();
+    }
+  } catch (error) {
+    console.warn('Backend API not available, falling back to Supabase direct access:', error);
+    // Fallback to direct Supabase access
+    return await getRecipesFromSupabase();
+  }
+};
+
+/**
+ * Fallback method to get recipes directly from Supabase
+ */
+const getRecipesFromSupabase = async (): Promise<Recipe[]> => {
   const { data, error } = await supabase
     .from('recipes')
     .select('*')
