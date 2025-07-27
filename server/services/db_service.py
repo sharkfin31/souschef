@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from config import supabase
 from utils.helpers import setup_logger
 
@@ -219,20 +219,58 @@ async def save_recipe_to_db(recipe_data: Dict[str, Any], source_url: str, image_
         logger.error(f"Database error saving recipe: {e}")
         return None
 
-async def get_user_recipes(user_id: str) -> list:
-    """Get all recipes for a specific user"""
+async def get_user_recipes(user_id: str, auth_token: Optional[str] = None) -> list:
+    """Get all recipes for a specific user with proper authentication context"""
     try:
-        result = supabase.table("recipes").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-        return result.data if result.data else []
+        if not supabase:
+            logger.error("Supabase client is not initialized!")
+            return []
+            
+        # Use the client with optional auth context
+        client = supabase
+        if auth_token:
+            try:
+                # Set the auth context for RLS
+                client.postgrest.auth(auth_token)
+            except Exception as auth_error:
+                logger.error(f"Failed to set auth context for recipes: {auth_error}")
+        
+        # Query recipes with user_id filter and proper ordering
+        result = client.table("recipes").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        
+        recipes = result.data if result.data else []
+        logger.info(f"Found {len(recipes)} recipes for user {user_id}")
+        return recipes
+        
     except Exception as e:
         logger.error(f"Error fetching user recipes: {e}")
         return []
 
-async def get_user_recipe_by_id(recipe_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-    """Get a specific recipe for a user (with user verification)"""
+async def get_user_recipe_by_id(recipe_id: str, user_id: str, auth_token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Get a specific recipe for a user with proper authentication context"""
     try:
-        result = supabase.table("recipes").select("*").eq("id", recipe_id).eq("user_id", user_id).single().execute()
-        return result.data if result.data else None
+        if not supabase:
+            logger.error("Supabase client is not initialized!")
+            return None
+            
+        # Use the client with optional auth context
+        client = supabase
+        if auth_token:
+            try:
+                # Set the auth context for RLS
+                client.postgrest.auth(auth_token)
+            except Exception as auth_error:
+                logger.error(f"Failed to set auth context for recipe: {auth_error}")
+        
+        # Query specific recipe with user verification
+        result = client.table("recipes").select("*").eq("id", recipe_id).eq("user_id", user_id).execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        else:
+            logger.warn(f"Recipe {recipe_id} not found for user {user_id}")
+            return None
+            
     except Exception as e:
         logger.error(f"Error fetching user recipe: {e}")
         return None
@@ -267,11 +305,31 @@ async def update_recipe_metadata(recipe_id: str, metadata: Dict[str, Any], user_
         logger.error(f"Error updating recipe metadata: {e}")
         return False
 
-async def get_user_profile(user_id: str) -> Optional[Dict[str, Any]]:
-    """Get user profile from Supabase profiles table"""
+async def get_user_profile(user_id: str, auth_token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Get user profile from Supabase profiles table with proper error handling"""
     try:
-        result = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
-        return result.data
+        if not supabase:
+            logger.error("Supabase client is not initialized!")
+            return None
+            
+        # Use the client with optional auth context
+        client = supabase
+        if auth_token:
+            try:
+                # Set the auth context for RLS
+                client.postgrest.auth(auth_token)
+            except Exception as auth_error:
+                logger.error(f"Failed to set auth context: {auth_error}")
+        
+        # Query without .single() to avoid PGRST116 error when no rows exist
+        result = client.table("profiles").select("*").eq("id", user_id).execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        else:
+            # Try to create a basic profile if none exists
+            logger.info(f"No profile found for user {user_id}, attempting to create one")
+                
     except Exception as e:
         logger.error(f"Error fetching user profile: {e}")
         return None
