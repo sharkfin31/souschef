@@ -1,89 +1,150 @@
 import { Recipe } from '../../types/recipe';
 import { apiClient } from './apiClient';
 
+// Set to false to use real API calls instead of mock data
+const USE_MOCK_DATA = false;
+
+/**
+ * Mock response for testing frontend logic
+ */
+const getMockResponse = () => ({
+  success: true,
+  message: "Recipe extracted successfully (MOCK DATA)",
+  data: {
+    recipe_id: "mock-recipe-123",
+    title: "Mock Chocolate Chip Cookies",
+    description: "Delicious homemade chocolate chip cookies that are crispy on the outside and chewy on the inside.",
+    prep_time: 15,
+    prepTime: 15,
+    cook_time: 12,
+    cookTime: 12,
+    total_time: 27,
+    servings: 24,
+    difficulty: "Easy",
+    source_url: "https://example.com/mock-recipe",
+    post_url: "https://example.com/mock-recipe",
+    image_url: "https://via.placeholder.com/400x300/8B4513/FFFFFF?text=Mock+Recipe+Image",
+    source: "mock",
+    extracted_via: "mock",
+    ingredients: [
+      {
+        name: "flour",
+        quantity: "2.25",
+        unit: "cup"
+      },
+      {
+        name: "butter",
+        quantity: "1",
+        unit: "cup"
+      },
+      {
+        name: "brown sugar",
+        quantity: "0.75",
+        unit: "cup"
+      },
+      {
+        name: "white sugar",
+        quantity: "0.75",
+        unit: "cup"
+      },
+      {
+        name: "eggs",
+        quantity: "2",
+        unit: null
+      },
+      {
+        name: "vanilla extract",
+        quantity: "2",
+        unit: "tsp"
+      },
+      {
+        name: "baking soda",
+        quantity: "1",
+        unit: "tsp"
+      },
+      {
+        name: "salt",
+        quantity: "1",
+        unit: "tsp"
+      },
+      {
+        name: "chocolate chips",
+        quantity: "2",
+        unit: "cup"
+      }
+    ],
+    instructions: [
+      {
+        stepNumber: 1,
+        step_number: 1,
+        description: "Preheat oven to 375°F (190°C).",
+        timeEstimate: 5
+      },
+      {
+        stepNumber: 2,
+        step_number: 2,
+        description: "In a large bowl, cream together butter and both sugars until light and fluffy.",
+        timeEstimate: 3
+      },
+      {
+        stepNumber: 3,
+        step_number: 3,
+        description: "Beat in eggs one at a time, then add vanilla extract.",
+        timeEstimate: 2
+      },
+      {
+        stepNumber: 4,
+        step_number: 4,
+        description: "In a separate bowl, whisk together flour, baking soda, and salt.",
+        timeEstimate: 2
+      },
+      {
+        stepNumber: 5,
+        step_number: 5,
+        description: "Gradually mix the flour mixture into the wet ingredients until just combined.",
+        timeEstimate: 2
+      },
+      {
+        stepNumber: 6,
+        step_number: 6,
+        description: "Fold in chocolate chips.",
+        timeEstimate: 1
+      },
+      {
+        stepNumber: 7,
+        step_number: 7,
+        description: "Drop rounded tablespoons of dough onto ungreased baking sheets.",
+        timeEstimate: 5
+      },
+      {
+        stepNumber: 8,
+        step_number: 8,
+        description: "Bake for 9-11 minutes or until golden brown around the edges.",
+        timeEstimate: 12
+      },
+      {
+        stepNumber: 9,
+        step_number: 9,
+        description: "Cool on baking sheet for 2 minutes before transferring to wire rack.",
+        timeEstimate: 2
+      }
+    ],
+    tags: ["Dessert", "Baking", "American", "Easy", "Sweet", "Family-friendly"],
+    nutritionNotes: "High in calories and sugar. Contains gluten and dairy."
+  }
+});
+
 /**
  * Process ingredient to ensure quantity is a string
  */
 const processIngredient = (ing: any, recipeId: string) => ({
   id: crypto.randomUUID(),
   recipeId,
-  name: ing.name,
-  quantity: ing.quantity?.toString() || null,
-  unit: ing.unit || null,
+  name: ing?.name || 'Unknown ingredient',
+  quantity: ing?.quantity?.toString() || null,
+  unit: ing?.unit || null,
   notes: null
 });
-
-/**
- * Generate recipe tags based on ingredients and title
- */
-const generateRecipeTags = (recipe: any): string[] => {
-  const tags: string[] = [];
-  const title = recipe.title.toLowerCase();
-  const ingredients = recipe.ingredients.map((ing: any) => ing.name.toLowerCase());
-  const allText = title + ' ' + ingredients.join(' ');
-  
-  // Cuisine tags
-  const cuisines = [
-    'Italian', 'Mexican', 'Chinese', 'Indian', 'Japanese', 'Thai', 
-    'Mediterranean', 'French', 'Greek', 'Spanish', 'Korean', 'Vietnamese',
-    'American', 'Middle Eastern', 'Caribbean', 'African'
-  ];
-  
-  cuisines.forEach(cuisine => {
-    if (title.includes(cuisine.toLowerCase()) || 
-      ingredients.some((ing: string) => ing.includes(cuisine.toLowerCase()))) {
-      tags.push(cuisine);
-    }
-  });
-  
-  // Dietary tags
-  if (!ingredients.some((ing: string) => [
-    'meat', 'chicken', 'beef', 'pork', 'lamb', 'turkey', 'bacon',
-    'sausage', 'ham', 'prosciutto', 'veal', 'duck', 'goose'
-  ].some(meat => ing.includes(meat)))) {
-    tags.push('Vegetarian');
-    
-    // Check for vegan (no animal products)
-    if (!ingredients.some((ing: string) => [
-      'milk', 'cheese', 'cream', 'butter', 'yogurt', 'egg', 'honey',
-      'mayonnaise', 'gelatin'
-    ].some(animal => ing.includes(animal)))) {
-      tags.push('Vegan');
-    }
-  }
-  
-  // Meal type tags
-  const mealTypes = [
-    { name: 'Breakfast', keywords: ['breakfast', 'pancake', 'waffle', 'oatmeal', 'cereal'] },
-    { name: 'Lunch', keywords: ['lunch', 'sandwich', 'wrap', 'salad'] },
-    { name: 'Dinner', keywords: ['dinner', 'roast', 'steak', 'casserole'] },
-    { name: 'Dessert', keywords: ['dessert', 'cake', 'cookie', 'pie', 'ice cream', 'chocolate', 'sweet'] },
-    { name: 'Snack', keywords: ['snack', 'dip', 'chips', 'popcorn'] },
-    { name: 'Appetizer', keywords: ['appetizer', 'starter', 'finger food', 'hors d\'oeuvre'] },
-    { name: 'Side Dish', keywords: ['side', 'accompaniment'] },
-    { name: 'Soup', keywords: ['soup', 'stew', 'broth', 'chowder'] },
-    { name: 'Salad', keywords: ['salad'] },
-    { name: 'Drink', keywords: ['drink', 'beverage', 'cocktail', 'smoothie', 'juice'] },
-    { name: 'Baking', keywords: ['bread', 'muffin', 'bake', 'pastry', 'dough'] }
-  ];
-  
-  mealTypes.forEach(type => {
-    if (type.keywords.some(keyword => allText.includes(keyword))) {
-      tags.push(type.name);
-    }
-  });
-  
-  // Add any tags from the AI response if available
-  if (recipe.tags && Array.isArray(recipe.tags)) {
-    recipe.tags.forEach((tag: string) => {
-      if (!tags.includes(tag)) {
-        tags.push(tag);
-      }
-    });
-  }
-  
-  return tags.length > 0 ? tags : ['Uncategorized'];
-};
 
 /**
  * Extract recipe from URL (Instagram, website, or any supported URL)
@@ -100,29 +161,37 @@ export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
     `
   });
   
-  // Generate tags based on recipe content
-  const tags = generateRecipeTags(response);
+  // Handle nested response structure - extract the actual recipe data
+  const recipeData = response?.data || response;
+  
+  // Validate response structure
+  if (!recipeData || !recipeData.recipe_id) {
+    console.error('❌ Invalid response structure:', response);
+    throw new Error('Invalid response from server: missing recipe data');
+  }
   
   // Format the recipe data for our app (handle both Instagram and web URL responses)
-  return {
-    id: response.recipe_id,
-    title: response.title,
-    description: response.description || '',
-    sourceUrl: response.source_url || response.post_url || '',
-    imageUrl: response.image_url,
-    ingredients: response.ingredients.map((ing: any) => processIngredient(ing, response.recipe_id)),
-    instructions: response.instructions.map((inst: any) => ({
+  const formattedRecipe = {
+    id: recipeData.recipe_id,
+    title: recipeData.title || 'Untitled Recipe',
+    description: recipeData.description || '',
+    sourceUrl: recipeData.source_url || recipeData.post_url || '',
+    imageUrl: recipeData.image_url || '',
+    ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
+    instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
       id: crypto.randomUUID(),
-      recipeId: response.recipe_id,
-      stepNumber: inst.stepNumber || inst.step_number,
-      description: inst.description
+      recipeId: recipeData.recipe_id,
+      stepNumber: inst.stepNumber || inst.step_number || (index + 1),
+      description: inst.description || ''
     })),
-    prepTime: response.prep_time ?? response.prepTime ?? null,
-    cookTime: response.cook_time ?? response.cookTime ?? null,
-    servings: response.servings ?? null,
-    tags,
+    prepTime: recipeData.prep_time ?? recipeData.prepTime ?? null,
+    cookTime: recipeData.cook_time ?? recipeData.cookTime ?? null,
+    servings: recipeData.servings ?? null,
+    tags: recipeData.tags || ['Uncategorized'],
     createdAt: new Date().toISOString()
   };
+  
+  return formattedRecipe;
 };
 
 /**
@@ -156,29 +225,106 @@ export const extractRecipeFromMultipleImages = async (images: File[]): Promise<R
     4. Remove qualifiers like 'fresh', 'dried', 'chopped', etc. from ingredient names unless they significantly change the ingredient.
   `);
   
-  const response = await apiClient.postForm('/extract-images', formData);
+  const response = USE_MOCK_DATA 
+    ? await new Promise(resolve => {
+        setTimeout(() => {
+          const mockResponse = getMockResponse();
+          mockResponse.data.title = "Mock Recipe from Images";
+          mockResponse.data.source_url = "";
+          mockResponse.data.post_url = "";
+          mockResponse.message = "Recipe extracted from images successfully (MOCK DATA)";
+          resolve(mockResponse);
+        }, 2000);
+      })
+    : await apiClient.postForm('/extract-images', formData);
   
-  // Generate tags based on recipe content
-  const tags = generateRecipeTags(response);
+  // Handle nested response structure - extract the actual recipe data
+  const recipeData = response?.data || response;
+  
+  // Validate response structure
+  if (!recipeData || !recipeData.recipe_id) {
+    console.error('❌ Invalid image response structure:', response);
+    throw new Error('Invalid response from server: missing recipe data');
+  }
   
   // Format the recipe data for our app
   return {
-    id: response.recipe_id,
-    title: response.title,
-    description: response.description || '',
+    id: recipeData.recipe_id,
+    title: recipeData.title || 'Untitled Recipe',
+    description: recipeData.description || '',
     sourceUrl: '',
-    imageUrl: response.image_url,
-    ingredients: response.ingredients.map((ing: any) => processIngredient(ing, response.recipe_id)),
-    instructions: response.instructions.map((inst: any) => ({
+    imageUrl: recipeData.image_url || '',
+    ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
+    instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
       id: crypto.randomUUID(),
-      recipeId: response.recipe_id,
-      stepNumber: inst.stepNumber,
-      description: inst.description
+      recipeId: recipeData.recipe_id,
+      stepNumber: inst.stepNumber || (index + 1),
+      description: inst.description || ''
     })),
-    prepTime: response.prepTime ?? null,
-    cookTime: response.cookTime ?? null,
-    servings: response.servings ?? null,
-    tags,
+    prepTime: recipeData.prepTime ?? null,
+    cookTime: recipeData.cookTime ?? null,
+    servings: recipeData.servings ?? null,
+    tags: recipeData.tags || ['Uncategorized'],
+    createdAt: new Date().toISOString()
+  };
+};
+
+/**
+ * Extract recipe from PDF file
+ */
+export const extractRecipeFromPDF = async (pdf: File): Promise<Recipe> => {
+  const formData = new FormData();
+  formData.append('pdf', pdf);
+  
+  // Add instructions for AI processing
+  formData.append('instructions', `
+    When extracting ingredients, please normalize units and ingredient names:
+    1. Normalize units: treat similar units as the same (e.g., 'g', 'gm', 'gram', 'grams' should all be 'g').
+    2. Normalize ingredient names: remove unnecessary descriptors (e.g., 'fresh coriander', 'coriander leaves', 'coriander bunch' should all be 'coriander').
+    3. Be consistent with units: use standard abbreviations where possible (g, kg, ml, l, tbsp, tsp, cup).
+    4. Remove qualifiers like 'fresh', 'dried', 'chopped', etc. from ingredient names unless they significantly change the ingredient.
+  `);
+  
+  const response = USE_MOCK_DATA 
+    ? await new Promise(resolve => {
+        setTimeout(() => {
+          const mockResponse = getMockResponse();
+          mockResponse.data.title = "Mock Recipe from PDF";
+          mockResponse.data.source_url = "";
+          mockResponse.data.post_url = "";
+          mockResponse.message = "Recipe extracted from PDF successfully (MOCK DATA)";
+          resolve(mockResponse);
+        }, 3000);
+      })
+    : await apiClient.postForm('/extract-pdf', formData);
+  
+  // Handle nested response structure - extract the actual recipe data
+  const recipeData = response?.data || response;
+  
+  // Validate response structure
+  if (!recipeData || !recipeData.recipe_id) {
+    console.error('❌ Invalid PDF response structure:', response);
+    throw new Error('Invalid response from server: missing recipe data');
+  }
+  
+  // Format the recipe data for our app
+  return {
+    id: recipeData.recipe_id,
+    title: recipeData.title || 'Untitled Recipe',
+    description: recipeData.description || '',
+    sourceUrl: '',
+    imageUrl: recipeData.image_url || '',
+    ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
+    instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
+      id: crypto.randomUUID(),
+      recipeId: recipeData.recipe_id,
+      stepNumber: inst.stepNumber || (index + 1),
+      description: inst.description || ''
+    })),
+    prepTime: recipeData.prepTime ?? null,
+    cookTime: recipeData.cookTime ?? null,
+    servings: recipeData.servings ?? null,
+    tags: recipeData.tags || ['Uncategorized'],
     createdAt: new Date().toISOString()
   };
 };
@@ -186,5 +332,6 @@ export const extractRecipeFromMultipleImages = async (images: File[]): Promise<R
 export const recipeApi = {
   extractRecipeFromUrl,
   extractRecipeFromImage,
-  extractRecipeFromMultipleImages
+  extractRecipeFromMultipleImages,
+  extractRecipeFromPDF
 };

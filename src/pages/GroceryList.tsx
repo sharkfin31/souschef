@@ -4,7 +4,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import '../assets/grocery-animations.css';
 import '../assets/list-animations.css';
 import './GroceryList.css';
-import { getGroceryLists, updateGroceryItemStatus, createCustomList, moveItemToList, deleteGroceryList, deleteGroceryItem, updateGroceryListName, shareMultipleGroceryLists } from '../services/grocery/groceryService';
+import { getGroceryLists, updateGroceryItemStatus, createCustomList, moveItemToList, deleteGroceryList, deleteGroceryItem, updateGroceryListName, shareMultipleGroceryLists, clearAllItemsFromList } from '../services/grocery/groceryService';
 import { GroceryList as GroceryListType } from '../types/recipe';
 import { FaSpinner, FaShoppingBasket, FaPlus, FaTrash, FaChevronUp, FaShareAlt, FaCheck } from 'react-icons/fa';
 import { FaPen, FaXmark } from "react-icons/fa6";
@@ -73,6 +73,8 @@ const GroceryList = () => {
   const [collapsedLists, setCollapsedLists] = useState<Set<string>>(new Set());
   const [shareSuccess, setShareSuccess] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [clearingAllItems, setClearingAllItems] = useState<string | null>(null);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState<string | null>(null);
   
   const fetchLists = async () => {
     setLoading(true);
@@ -223,6 +225,29 @@ const GroceryList = () => {
       }
       return newSet;
     });
+  };
+
+  const handleClearAllItems = async (listId: string) => {
+    setClearingAllItems(listId);
+    
+    try {
+      await clearAllItemsFromList(listId);
+      
+      // Update local state to remove all items from the list
+      setLists(lists.map(list => {
+        if (list.id === listId) {
+          return { ...list, items: [] };
+        }
+        return list;
+      }));
+      
+      setShowClearAllConfirm(null);
+    } catch (err) {
+      console.error('Failed to clear all items:', err);
+      setError('Failed to clear all items from list');
+    } finally {
+      setClearingAllItems(null);
+    }
   };
   
   const handleSaveListName = async (listId: string) => {
@@ -418,6 +443,19 @@ const GroceryList = () => {
                   )}
                 </div>
                 <div className="flex space-x-2 items-center">
+                  {list.name === 'Master Grocery List' && editingListId !== list.id && list.items.length > 0 && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowClearAllConfirm(list.id);
+                      }}
+                      disabled={clearingAllItems === list.id}
+                      className="text-white opacity-80 hover:opacity-100 p-1 transition-opacity"
+                      title="Clear all items"
+                    >
+                      {clearingAllItems === list.id ? <FaSpinner className="animate-spin" /> : <FaTrash />}
+                    </button>
+                  )}
                   {list.name !== 'Master Grocery List' && editingListId !== list.id && (
                     <>
                       <button 
@@ -501,6 +539,40 @@ const GroceryList = () => {
         lists={lists}
         onShare={handleShareMultipleLists}
       />
+      
+      {/* Clear All Items Confirmation Modal */}
+      {showClearAllConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Clear All Items</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to clear all items from the Master Grocery List? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowClearAllConfirm(null)}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleClearAllItems(showClearAllConfirm)}
+                disabled={clearingAllItems === showClearAllConfirm}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {clearingAllItems === showClearAllConfirm ? (
+                  <span className="flex items-center">
+                    <FaSpinner className="animate-spin mr-2" />
+                    Clearing...
+                  </span>
+                ) : (
+                  'Clear All'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

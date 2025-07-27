@@ -8,23 +8,32 @@ including Instagram posts and recipe websites.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 import os
 import sys
 import logging
 from pathlib import Path
 
-# Add the parent directory to sys.path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-# Import routes using the new module structure
-from routes import recipe_router, grocery_router
+# Import routes and configuration directly
+from routes.recipe_routes import router as recipe_router
+from routes.grocery_routes import router as grocery_router
 from config import UPLOAD_DIR
-from utils import setup_logger
+from utils.helpers import setup_logger
 
 # Setup logging
 logger = setup_logger(__name__)
 
-# FastAPI app with enhanced metadata
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    logger.info("Starting SousChef API v1.0.0")
+    logger.info(f"Upload directory: {UPLOAD_DIR}")
+    yield
+    # Shutdown
+    logger.info("Shutting down SousChef API")
+
+# FastAPI app with enhanced metadata and modern lifespan events
 app = FastAPI(
     title="SousChef API", 
     description="""
@@ -39,15 +48,16 @@ app = FastAPI(
     The API uses intelligent content extraction strategies including JSON-LD, 
     microdata, and CSS selector-based extraction for optimal recipe parsing.
     """,
-    version="2.0.0",
+    version="1.0.0",
     contact={
         "name": "SousChef API Support",
-        "url": "https://github.com/your-repo/souschef",
+        "url": "https://github.com/sharkfin31/souschef",
     },
     license_info={
         "name": "MIT",
         "url": "https://opensource.org/licenses/MIT",
     },
+    lifespan=lifespan
 )
 
 # Configure CORS middleware
@@ -71,7 +81,7 @@ async def read_root():
     """Root endpoint with API information"""
     return {
         "message": "Welcome to SousChef API",
-        "version": "2.0.0",
+        "version": "1.0.0",
         "docs": "/docs",
         "features": [
             "Multi-source recipe extraction",
@@ -86,26 +96,13 @@ async def health_check():
     """Health check endpoint for monitoring"""
     return {
         "status": "healthy",
-        "version": "2.0.0",
+        "version": "1.0.0",
         "services": {
             "api": "operational",
             "database": "operational",
             "ai_service": "operational"
         }
     }
-
-# Application startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup"""
-    logger.info("Starting SousChef API v2.0.0")
-    logger.info(f"Upload directory: {UPLOAD_DIR}")
-
-# Application shutdown event  
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on application shutdown"""
-    logger.info("Shutting down SousChef API")
 
 if __name__ == '__main__':
     import uvicorn

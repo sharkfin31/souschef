@@ -53,7 +53,7 @@ const LoginForm = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-            placeholder="Enter your email"
+            placeholder="johndoe@gmail.com"
             required
           />
         </div>
@@ -69,7 +69,7 @@ const LoginForm = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary pr-10"
-              placeholder="Enter your password"
+              placeholder="*********"
               required
             />
             <button

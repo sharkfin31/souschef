@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { FaSpinner, FaLink, FaImage, FaCheck, FaArrowUp, FaArrowDown, FaExclamationCircle } from 'react-icons/fa';
+import { FaSpinner, FaLink, FaImage, FaCheck, FaArrowUp, FaArrowDown, FaExclamationCircle, FaFilePdf } from 'react-icons/fa';
 import { Recipe } from '../types/recipe';
-import { extractRecipeFromUrl, extractRecipeFromMultipleImages } from '../services/api/recipeApi';
+import { extractRecipeFromUrl, extractRecipeFromMultipleImages, extractRecipeFromPDF } from '../services/api/recipeApi';
 
 interface RecipeImportProps {
   onRecipeImported: (recipe: Recipe) => void;
@@ -12,9 +12,10 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'link' | 'image'>('link');
+  const [activeTab, setActiveTab] = useState<'link' | 'image' | 'pdf'>('link');
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
 
 
   const handleLinkSubmit = async (e: React.FormEvent) => {
@@ -128,6 +129,61 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
     }
   };
 
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      setError('Please select a PDF file');
+      return;
+    }
+    
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('PDF file must be smaller than 10MB');
+      return;
+    }
+    
+    setPdfFile(file);
+    setError(null);
+  };
+
+  const handlePdfSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!pdfFile) {
+      setError('Please select a PDF file');
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+    
+    try {
+      const recipe = await extractRecipeFromPDF(pdfFile);
+      
+      setSuccess(true);
+      onRecipeImported(recipe);
+      
+      // Reset form after a delay
+      setTimeout(() => {
+        setPdfFile(null);
+        setSuccess(false);
+        // Reset file input
+        const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+      }, 2000);
+      
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Failed to import recipe from PDF');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold mb-4">Import a Recipe</h2>
@@ -147,6 +203,13 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
         >
           <FaImage className="inline mr-2" />
           From Image
+        </button>
+        <button
+          className={`py-2 px-4 ${activeTab === 'pdf' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`}
+          onClick={() => setActiveTab('pdf')}
+        >
+          <FaFilePdf className="inline mr-2" />
+          From PDF
         </button>
       </div>
       
@@ -306,6 +369,97 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
               </span>
             ) : (
               'Extract Recipe from Image'
+            )}
+          </button>
+        </form>
+      )}
+      
+      {/* PDF Import Form */}
+      {activeTab === 'pdf' && (
+        <form onSubmit={handlePdfSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="pdf" className="block text-sm font-medium text-gray-700 mb-1">
+              Recipe PDF File
+            </label>
+            
+            {pdfFile ? (
+              <div className="mb-2">
+                <div className="flex items-center p-3 bg-gray-50 rounded-md border">
+                  <FaFilePdf className="text-red-500 mr-3" size={24} />
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{pdfFile.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPdfFile(null);
+                      const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
+                      if (fileInput) fileInput.value = '';
+                    }}
+                    className="text-red-500 hover:text-red-700 ml-2"
+                    title="Remove PDF"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="mt-2 text-center">
+                  <button 
+                    type="button" 
+                    className="text-primary text-sm"
+                    onClick={() => document.getElementById('pdf-upload')?.click()}
+                  >
+                    Choose different PDF
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center cursor-pointer hover:border-primary"
+                onClick={() => document.getElementById('pdf-upload')?.click()}
+              >
+                <FaFilePdf className="mx-auto h-12 w-12 text-gray-400" />
+                <p className="mt-1 text-sm text-gray-500">
+                  Click to upload or drag and drop
+                </p>
+                <p className="text-xs text-gray-500">
+                  PDF files up to 10MB
+                </p>
+              </div>
+            )}
+            
+            <input
+              type="file"
+              id="pdf-upload"
+              accept=".pdf,application/pdf"
+              onChange={handlePdfUpload}
+              className="hidden"
+            />
+            
+            <p className="mt-1 text-xs text-gray-500">
+              Supports text-based PDFs and scanned PDFs with OCR processing
+            </p>
+          </div>
+          
+          <button
+            type="submit"
+            className="btn btn-primary w-full"
+            disabled={loading || success || !pdfFile}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <FaSpinner className="animate-spin mr-2" />
+                Processing PDF...
+              </span>
+            ) : success ? (
+              <span className="flex items-center justify-center">
+                <FaCheck className="mr-2" />
+                Recipe Imported!
+              </span>
+            ) : (
+              'Extract Recipe from PDF'
             )}
           </button>
         </form>

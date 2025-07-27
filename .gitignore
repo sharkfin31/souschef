@@ -25,6 +25,10 @@ var/
 # Instaloader session files
 *.session
 
+# Instagram session files (instagrapi)
+instagram_session.json
+server/instagram_session.json
+
 # Images
 server/images/
 

@@ -270,3 +270,39 @@ export const createRecipe = async (parsedRecipe: ParsedRecipe, sourceUrl: string
   // Return the created recipe
   return getRecipeById(recipeId);
 };
+
+/**
+ * Delete a recipe and all its associated data (ingredients, instructions)
+ */
+export const deleteRecipe = async (recipeId: string): Promise<boolean> => {
+  try {
+    // First verify the recipe exists and belongs to the current user
+    const { data: recipe, error: fetchError } = await supabase
+      .from('recipes')
+      .select('id, user_id')
+      .eq('id', recipeId)
+      .single();
+
+    if (fetchError || !recipe) {
+      console.error('Recipe not found or access denied:', fetchError);
+      throw new Error('Recipe not found or you do not have permission to delete it');
+    }
+
+    // Delete the recipe - this will cascade delete ingredients and instructions
+    // due to the foreign key constraints in the database
+    const { error: deleteError } = await supabase
+      .from('recipes')
+      .delete()
+      .eq('id', recipeId);
+
+    if (deleteError) {
+      console.error('Error deleting recipe:', deleteError);
+      throw new Error('Failed to delete recipe');
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in deleteRecipe:', error);
+    throw error;
+  }
+};

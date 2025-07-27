@@ -4,8 +4,12 @@ from urllib.parse import urlparse
 from services.instagram_service import get_recipe_from_instagram, validate_instagram_url
 from services.ai_service import process_with_ai
 from services.db_service import save_recipe_to_db
+from utils.helpers import setup_logger
 import httpx
 from bs4 import BeautifulSoup
+
+# Setup logging
+logger = setup_logger(__name__)
 
 class RecipeExtractionService:
     """Unified service for extracting recipes from various URL sources"""
@@ -29,18 +33,18 @@ class RecipeExtractionService:
             if not self._is_valid_url(url):
                 return {"error": "Invalid URL format. Please provide a valid HTTP/HTTPS URL."}
             
-            print(f"Processing URL: {url}")
+            logger.info(f"Processing URL: {url}")
             
             # Route to appropriate extraction service
             if validate_instagram_url(url):
-                print("Detected Instagram URL - routing to Instagram service")
+                logger.info("Detected Instagram URL - routing to Instagram service")
                 return await get_recipe_from_instagram(url, user_id)
             else:
-                print("Detected web URL - routing to web scraping service")
+                logger.info("Detected web URL - routing to web scraping service")
                 return await self._extract_from_web_url(url, user_id)
                 
         except Exception as e:
-            print(f"Error in recipe extraction service: {e}")
+            logger.error(f"Error in recipe extraction service: {e}")
             return {"error": f"Failed to process URL: {str(e)}"}
     
     def _is_valid_url(self, url: str) -> bool:
@@ -64,7 +68,7 @@ class RecipeExtractionService:
             if not recipe_content:
                 return {"error": "No recipe content found on the webpage"}
             
-            print(f"Extracted {len(recipe_content)} characters of content from web page")
+            logger.info(f"Extracted {len(recipe_content)} characters of content from web page")
             
             # Process with AI
             recipe_data = await process_with_ai(recipe_content)
@@ -79,7 +83,7 @@ class RecipeExtractionService:
             if not recipe_id:
                 return {"error": "Failed to save recipe to database"}
             
-            print(f"Successfully processed web recipe: {recipe_data.get('title')}")
+            logger.info(f"Successfully processed web recipe: {recipe_data.get('title')}")
             
             return {
                 "success": True,
@@ -100,7 +104,7 @@ class RecipeExtractionService:
             }
             
         except Exception as e:
-            print(f"Error extracting from web URL: {e}")
+            logger.error(f"Error extracting from web URL: {e}")
             return {"error": f"Failed to extract recipe from webpage: {str(e)}"}
     
     async def _fetch_webpage_content(self, url: str) -> Optional[str]:
@@ -119,22 +123,22 @@ class RecipeExtractionService:
                 response = await client.get(url, headers=headers)
                 
                 if response.status_code != 200:
-                    print(f"HTTP {response.status_code} error fetching {url}")
+                    logger.warn(f"HTTP {response.status_code} error fetching {url}")
                     return None
                 
                 # Check content length
                 if len(response.content) > self.max_content_length:
-                    print(f"Content too large: {len(response.content)} bytes")
+                    logger.warn(f"Content too large: {len(response.content)} bytes")
                     return None
                 
                 # Decode content
                 return response.text
                 
         except httpx.TimeoutException:
-            print(f"Timeout fetching {url}")
+            logger.warn(f"Timeout fetching {url}")
             return None
         except Exception as e:
-            print(f"Error fetching webpage: {e}")
+            logger.error(f"Error fetching webpage: {e}")
             return None
     
     async def _extract_recipe_content_from_html(self, html_content: str, url: str) -> Optional[str]:
@@ -165,7 +169,7 @@ class RecipeExtractionService:
             return None
             
         except Exception as e:
-            print(f"Error parsing HTML content: {e}")
+            logger.error(f"Error parsing HTML content: {e}")
             return None
     
     def _extract_json_ld_recipe(self, soup: BeautifulSoup) -> Optional[str]:
@@ -196,7 +200,7 @@ class RecipeExtractionService:
             return None
             
         except Exception as e:
-            print(f"Error extracting JSON-LD: {e}")
+            logger.error(f"Error extracting JSON-LD: {e}")
             return None
     
     def _format_json_ld_recipe(self, recipe_data: dict) -> str:
@@ -243,7 +247,7 @@ class RecipeExtractionService:
             return '\n'.join(content)
             
         except Exception as e:
-            print(f"Error formatting JSON-LD recipe: {e}")
+            logger.error(f"Error formatting JSON-LD recipe: {e}")
             return None
     
     def _extract_microdata_recipe(self, soup: BeautifulSoup) -> Optional[str]:
@@ -283,7 +287,7 @@ class RecipeExtractionService:
             return '\n'.join(content) if content else None
             
         except Exception as e:
-            print(f"Error extracting microdata: {e}")
+            logger.error(f"Error extracting microdata: {e}")
             return None
     
     def _extract_recipe_by_selectors(self, soup: BeautifulSoup) -> Optional[str]:
@@ -328,7 +332,7 @@ class RecipeExtractionService:
             return '\n'.join(content) if len(content) > 1 else None
             
         except Exception as e:
-            print(f"Error extracting by selectors: {e}")
+            logger.error(f"Error extracting by selectors: {e}")
             return None
     
     def _extract_general_content(self, soup: BeautifulSoup) -> Optional[str]:
@@ -357,7 +361,7 @@ class RecipeExtractionService:
             return None
             
         except Exception as e:
-            print(f"Error in general content extraction: {e}")
+            logger.error(f"Error in general content extraction: {e}")
             return None
     
     def _extract_main_image_url(self, html_content: str, base_url: str) -> Optional[str]:
@@ -394,7 +398,7 @@ class RecipeExtractionService:
             return None
             
         except Exception as e:
-            print(f"Error extracting image URL: {e}")
+            logger.error(f"Error extracting image URL: {e}")
             return None
     
     def _resolve_image_url(self, img_src: str, base_url: str) -> str:

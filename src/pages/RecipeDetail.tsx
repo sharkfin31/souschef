@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { getRecipeById, updateRecipeTags, updateRecipeTitle } from '../services/recipe/recipeService';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { getRecipeById, updateRecipeTags, updateRecipeTitle, deleteRecipe } from '../services/recipe/recipeService';
 import { getMasterGroceryList, addIngredientsToList } from '../services/grocery/groceryService';
 import { Recipe } from '../types/recipe';
-import { FaArrowLeft, FaClock, FaUtensils, FaSpinner, FaShoppingBasket, FaInstagram, FaImage, FaLink, FaMinus, FaPlus, FaTags } from 'react-icons/fa';
+import { FaArrowLeft, FaClock, FaUtensils, FaSpinner, FaShoppingBasket, FaInstagram, FaImage, FaLink, FaMinus, FaPlus, FaTags, FaTrash } from 'react-icons/fa';
 import { FaPen, FaCheck, FaXmark } from "react-icons/fa6"; 
 import '../assets/list-animations.css';
 import '../assets/grocery-animations.css';
 
 const RecipeDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,8 @@ const RecipeDetail = () => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [updatingTitle, setUpdatingTitle] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const newTagInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   
@@ -249,6 +252,24 @@ const RecipeDetail = () => {
     setNewTitle(recipe?.title || '');
     setEditingTitle(false);
   };
+
+  // Handle recipe deletion
+  const handleDeleteRecipe = async () => {
+    if (!recipe || !id) return;
+
+    setDeleting(true);
+    try {
+      await deleteRecipe(id);
+      // Navigate back to homepage after successful deletion
+      navigate('/');
+    } catch (err) {
+      setError('Failed to delete recipe. Please try again.');
+      console.error(err);
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
   
   // Removed handleAddSuggestion function as we're keeping suggestions as reference only
   
@@ -305,11 +326,19 @@ const RecipeDetail = () => {
   
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6 flex justify-between items-center">
         <Link to="/" className="flex items-center text-primary hover:underline">
           <FaArrowLeft className="mr-2" />
           Back to Recipes
         </Link>
+        
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          className="flex items-center px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-md shadow-sm transition-colors"
+          title="Delete recipe"
+        >
+          <FaTrash size={14} />
+        </button>
       </div>
       
       <div className="bg-white rounded-lg shadow-md overflow-hidden">        
@@ -495,9 +524,8 @@ const RecipeDetail = () => {
                 <div className="create-list-container inline-flex relative">
                   <button 
                     onClick={() => setEditingTags(true)}
-                    className={`btn btn-primary flex items-center create-list-button ${editingTags || recipe.tags.length >= 5 ? 'hidden' : ''}`}
-                    disabled={recipe.tags.length >= 5}
-                    title={recipe.tags.length >= 5 ? 'Maximum of 5 tags reached' : 'Add tags'}
+                    className={`btn btn-primary flex items-center create-list-button ${editingTags ? 'hidden' : ''}`}
+                    title="Edit tags"
                   >
                     <FaPen />
                   </button>
@@ -588,7 +616,7 @@ const RecipeDetail = () => {
           <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
             <p className="text-sm text-gray-500 flex items-center">
               Source:{' '}
-              {recipe.sourceUrl ? (
+              {recipe.sourceUrl && recipe.sourceUrl.trim() ? (
                 <>
                   {recipe.sourceUrl.includes('instagram.com') ? (
                     <FaInstagram className="ml-2 mr-1 text-pink-500" />
@@ -598,16 +626,48 @@ const RecipeDetail = () => {
                     <FaImage className="ml-2 mr-1 text-gray-500" />
                   )}
                   <a
-                    href={recipe.sourceUrl.startsWith('http') ? recipe.sourceUrl : '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={
+                      recipe.sourceUrl.startsWith('http') 
+                        ? recipe.sourceUrl 
+                        : recipe.sourceUrl.startsWith('www.') 
+                          ? `https://${recipe.sourceUrl}`
+                          : recipe.sourceUrl.includes('.') 
+                            ? `https://${recipe.sourceUrl}`
+                            : undefined
+                    }
+                    target={
+                      recipe.sourceUrl.startsWith('http') || 
+                      recipe.sourceUrl.startsWith('www.') || 
+                      recipe.sourceUrl.includes('.') 
+                        ? "_blank" 
+                        : "_self"
+                    }
+                    rel={
+                      recipe.sourceUrl.startsWith('http') || 
+                      recipe.sourceUrl.startsWith('www.') || 
+                      recipe.sourceUrl.includes('.') 
+                        ? "noopener noreferrer" 
+                        : undefined
+                    }
                     className="text-primary hover:underline"
+                    onClick={(e) => {
+                      // If it's not a valid URL, prevent the default behavior
+                      if (!recipe.sourceUrl.startsWith('http') && 
+                          !recipe.sourceUrl.startsWith('www.') && 
+                          !recipe.sourceUrl.includes('.')) {
+                        e.preventDefault();
+                      }
+                    }}
                   >
                     {recipe.sourceUrl.includes('instagram.com')
                       ? 'Instagram Post'
                       : recipe.sourceUrl.startsWith('http')
                         ? new URL(recipe.sourceUrl).hostname
-                        : recipe.sourceUrl}
+                        : recipe.sourceUrl.startsWith('www.')
+                          ? recipe.sourceUrl
+                          : recipe.sourceUrl.includes('.')
+                            ? recipe.sourceUrl
+                            : recipe.sourceUrl}
                   </a>
                 </>
               ) : (
@@ -615,8 +675,7 @@ const RecipeDetail = () => {
                   <FaImage className="mr-1 text-gray-500" />
                   Imported from image
                 </span>
-              )}
-            </p>
+              )}</p>
             
             <button
               onClick={handleCreateGroceryList}
@@ -645,6 +704,51 @@ const RecipeDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <FaTrash className="text-red-500 mr-3" size={24} />
+                <h3 className="text-lg font-semibold">Delete Recipe</h3>
+              </div>
+              
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete "<strong>{recipe?.title}</strong>"? 
+              </p>
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteRecipe}
+                  disabled={deleting}
+                  className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {deleting ? (
+                    <>
+                      <FaSpinner className="animate-spin mr-2" size={14} />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <FaTrash className="mr-2" size={14} />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

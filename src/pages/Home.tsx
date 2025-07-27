@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Recipe } from '../types/recipe';
 import RecipeCard from '../components/RecipeCard';
 import RecipeImport from '../components/RecipeImport';
-import { FaFilter, FaSearch, FaClock, FaTimes, FaPlus, FaCheck, FaChevronUp, FaChevronDown, FaTags, FaSpinner, FaExclamationTriangle, FaUtensils } from 'react-icons/fa';
+import { FaFilter, FaSearch, FaTimes, FaPlus, FaCheck, FaChevronUp, FaChevronDown, FaTags, FaSpinner, FaExclamationTriangle, FaUtensils } from 'react-icons/fa';
 
 const Home = () => {
   const { user } = useAuth();
@@ -20,7 +20,6 @@ const Home = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'cookTime'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [timeFilter, setTimeFilter] = useState<'all' | 'quick' | 'medium' | 'long'>('all');
   const filterRef = useRef<HTMLDivElement>(null);
   
   const fetchRecipes = async () => {
@@ -77,19 +76,6 @@ const Home = () => {
       );
     }
     
-    // Time filter
-    if (timeFilter !== 'all') {
-      filtered = filtered.filter(recipe => {
-        const cookTime = recipe.cookTime || 0;
-        switch (timeFilter) {
-          case 'quick': return cookTime <= 30;
-          case 'medium': return cookTime > 30 && cookTime <= 60;
-          case 'long': return cookTime > 60;
-          default: return true;
-        }
-      });
-    }
-    
     // Sort recipes
     filtered.sort((a, b) => {
       let comparison = 0;
@@ -111,7 +97,7 @@ const Home = () => {
     });
     
     setFilteredRecipes(filtered);
-  }, [searchQuery, selectedTags, timeFilter, sortBy, sortOrder, recipes]);
+  }, [searchQuery, selectedTags, sortBy, sortOrder, recipes]);
   
   useEffect(() => {
     fetchRecipes();
@@ -144,11 +130,10 @@ const Home = () => {
   const clearAllFilters = () => {
     setSelectedTags([]);
     setSearchQuery('');
-    setTimeFilter('all');
   };
 
   // Check if any filters are active
-  const hasActiveFilters = selectedTags.length > 0 || searchQuery.trim() || timeFilter !== 'all';
+  const hasActiveFilters = selectedTags.length > 0 || searchQuery.trim();
   
   return (
     <div>
@@ -207,58 +192,6 @@ const Home = () => {
             </button>
           )}
         </div>
-
-        {/* Quick Filter Pills */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-sm font-medium text-gray-700">Quick filters:</span>
-          
-          {/* Time filters */}
-          <button
-            onClick={() => setTimeFilter(timeFilter === 'quick' ? 'all' : 'quick')}
-            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-              timeFilter === 'quick'
-                ? 'bg-primary text-white border-primary'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
-            }`}
-          >
-            <FaClock className="inline mr-1" size={12} />
-            Quick (≤30 min)
-          </button>
-          
-          <button
-            onClick={() => setTimeFilter(timeFilter === 'medium' ? 'all' : 'medium')}
-            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-              timeFilter === 'medium'
-                ? 'bg-primary text-white border-primary'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
-            }`}
-          >
-            <FaClock className="inline mr-1" size={12} />
-            Medium (30-60 min)
-          </button>
-          
-          <button
-            onClick={() => setTimeFilter(timeFilter === 'long' ? 'all' : 'long')}
-            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-              timeFilter === 'long'
-                ? 'bg-primary text-white border-primary'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
-            }`}
-          >
-            <FaClock className="inline mr-1" size={12} />
-            Long (&gt;60 min)
-          </button>
-
-          {/* Clear filters button */}
-          {hasActiveFilters && (
-            <button
-              onClick={clearAllFilters}
-              className="px-3 py-1 text-sm text-red-600 hover:text-red-800 border border-red-300 rounded-full hover:border-red-500 transition-colors"
-            >
-              Clear all filters
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Recipes Section */}
@@ -271,10 +204,8 @@ const Home = () => {
             {hasActiveFilters && (
               <span className="text-primary">
                 • {selectedTags.length > 0 && `${selectedTags.length} tag${selectedTags.length > 1 ? 's' : ''}`}
-                {selectedTags.length > 0 && (searchQuery || timeFilter !== 'all') && ', '}
+                {selectedTags.length > 0 && searchQuery && ', '}
                 {searchQuery && 'search'}
-                {searchQuery && timeFilter !== 'all' && ', '}
-                {timeFilter !== 'all' && `${timeFilter} time`}
               </span>
             )}
           </div>
