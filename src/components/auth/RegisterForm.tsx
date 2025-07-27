@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { FaSpinner, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { FaSpinner, FaEye, FaEyeSlash, FaQuestionCircle } from 'react-icons/fa';
+import WhatsAppHelpModal from './WhatsAppHelpModal';
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
@@ -11,11 +12,13 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [whatsappApiKey, setWhatsappApiKey] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showWhatsAppHelp, setShowWhatsAppHelp] = useState(false);
   
   const { signUp } = useAuth();
   const { addNotification } = useNotification();
@@ -23,7 +26,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!fullName || !email || !phoneNumber || !password || !confirmPassword) {
+    if (!fullName || !email || !phoneNumber || !whatsappApiKey || !password || !confirmPassword) {
       addNotification('error', 'Please fill in all fields');
       return;
     }
@@ -44,10 +47,16 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
       return;
     }
 
+    // Basic validation for WhatsApp API key (should be alphanumeric)
+    if (!whatsappApiKey.trim() || whatsappApiKey.length < 10) {
+      addNotification('error', 'Please enter a valid WhatsApp API key');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const { success, error } = await signUp(email, password, fullName, phoneNumber);
+      const { success, error } = await signUp(email, password, fullName, phoneNumber, whatsappApiKey);
 
       if (success) {
         if (error) {
@@ -70,10 +79,11 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold text-center mb-6">Create Account</h2>
-      
-      <form onSubmit={handleSubmit}>
+    <>
+      <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-2xl font-bold text-center mb-6">Create Account</h2>
+        
+        <form onSubmit={handleSubmit}>
         <div className="mb-4">
           <label htmlFor="fullName" className="block text-gray-700 mb-1">
             Full Name
@@ -84,7 +94,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-            placeholder="Enter your full name"
+            placeholder="John Doe"
             required
           />
         </div>
@@ -99,7 +109,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-            placeholder="Enter your email"
+            placeholder="johndoe@gmail.com"
             required
           />
         </div>
@@ -114,11 +124,36 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             value={phoneNumber}
             onChange={(e) => setPhoneNumber(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-            placeholder="Enter phone number with country code (+1...)"
+            placeholder="+12345678901"
+            required
+          />
+        </div>
+
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <label htmlFor="whatsappApiKey" className="block text-gray-700">
+              WhatsApp API Key
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowWhatsAppHelp(true)}
+              className="text-blue-600 hover:text-blue-800 flex items-center text-sm"
+            >
+              <FaQuestionCircle className="mr-1" size={14} />
+              How to get this?
+            </button>
+          </div>
+          <input
+            id="whatsappApiKey"
+            type="text"
+            value={whatsappApiKey}
+            onChange={(e) => setWhatsappApiKey(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
+            placeholder="*******"
             required
           />
           <p className="text-xs text-gray-500 mt-1">
-            Example: +12345678901
+            This allows SousChef to send grocery lists to your WhatsApp
           </p>
         </div>
         
@@ -133,7 +168,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary pr-10"
-              placeholder="Create a password (min. 6 characters)"
+              placeholder="**********"
               required
             />
             <button
@@ -157,7 +192,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary pr-10"
-              placeholder="Confirm your password"
+              placeholder="**********"
               required
             />
             <button
@@ -181,7 +216,13 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
           {isSubmitting ? 'Creating Account...' : 'Create Account'}
         </button>
       </form>
-    </div>
+      </div>
+      
+      <WhatsAppHelpModal 
+        isOpen={showWhatsAppHelp} 
+        onClose={() => setShowWhatsAppHelp(false)} 
+      />
+    </>
   );
 };
 

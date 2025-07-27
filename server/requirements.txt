@@ -1,27 +1,35 @@
-# Core FastAPI dependencies
-fastapi==0.95.0
-uvicorn==0.21.1
+# Core FastAPI dependencies (compatible with pydantic 2.x)
+fastapi==0.104.1
+uvicorn==0.24.0
 python-multipart==0.0.6
-pydantic==1.10.7
+pydantic==2.11.7
 
 # Environment and configuration
-python-dotenv==0.19.0
+python-dotenv==1.0.0
 
-# HTTP and networking
-httpx>=0.23.0,<0.24.0
-requests==2.31.0
+# HTTP client for external APIs
+httpx>=0.25.0
+requests>=2.31.0
 
 # Database and authentication
-supabase==1.0.3
-PyJWT==2.8.0
+supabase>=2.17.0
+PyJWT>=2.10.1
+websockets>=13.0
 
 # Social media integration
-instaloader==4.9.5
+# Instagram extraction service using Apify
+apify-client>=1.7.1
+# Keep instagrapi as fallback option
+instagrapi==2.2.1
 
-# Image processing and OCR
-pillow==9.5.0
+# Image processing and OCR (updated for Python 3.13 compatibility)
+pillow>=10.0.0
 pytesseract==0.3.10
+
+# PDF processing
+PyPDF2==3.0.1
+pdf2image==1.17.0
 
 # Web scraping and parsing
 beautifulsoup4==4.12.2
-lxml==4.9.2
+lxml==5.1.0

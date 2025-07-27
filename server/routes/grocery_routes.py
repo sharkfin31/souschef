@@ -7,20 +7,19 @@ This module handles grocery list operations including:
 - Multiple list sharing functionality
 """
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Header
 from pydantic import BaseModel
 from typing import List, Optional
 import os
 import requests
 import urllib
-import smtplib
-from email.message import EmailMessage
+from dotenv import load_dotenv
 
 # Local imports
-from config import senderEmail, gatewayAddress, APP_KEY
 from utils.constants import Messages, StatusCodes
 from utils.helpers import setup_logger, format_error_response, format_success_response
-from dotenv import load_dotenv
+from services.db_service import get_user_profile
+from services.auth_service import get_current_user
 
 # Load environment variables
 load_dotenv()
@@ -29,10 +28,6 @@ load_dotenv()
 logger = setup_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["grocery"])
-
-# Get messaging service configuration from environment
-WHATSAPP_API_KEY = os.getenv("WHATSAPP_API_KEY")
-WHATSAPP_PHONE_NUMBER = os.getenv("WHATSAPP_PHONE_NUMBER")
 
 class GroceryItem(BaseModel):
     """Model for individual grocery list items"""
@@ -62,7 +57,7 @@ class ShareMultipleListsRequest(BaseModel):
     phoneNumber: Optional[str] = None
 
 @router.post("/share-list")
-async def share_grocery_list(request: ShareListRequest = Body(...)):
+async def share_grocery_list(request: ShareListRequest = Body(...), authorization: Optional[str] = Header(None)):
     """
     Share a grocery list via WhatsApp/SMS
     
@@ -70,8 +65,38 @@ async def share_grocery_list(request: ShareListRequest = Body(...)):
     using available messaging services (WhatsApp API or SMS gateway).
     """
     try:
-        logger.info(f"Sharing grocery list '{request.listName}' to {request.phoneNumber}")
+        logger.info(f"Sharing grocery list '{request.listName}' - phoneNumber from request: {request.phoneNumber}")
         
+        # Get current user
+        user_id = await get_current_user(authorization)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authentication required to share grocery lists")
+
+        # Get user profile to fetch WhatsApp API key
+        user_profile = await get_user_profile(user_id)
+        if not user_profile:
+            raise HTTPException(status_code=404, detail="User profile not found")
+
+        whatsapp_apikey = user_profile.get('whatsapp_api_key')
+        if not whatsapp_apikey:
+            raise HTTPException(
+                status_code=400, 
+                detail="WhatsApp API key not configured in your profile. Please update your profile settings."
+            )
+
+        # Use user's phone number if no phone number provided in request
+        phone_number = request.phoneNumber
+        if not phone_number:
+            phone_number = user_profile.get('phone_number')
+        
+        if not phone_number:
+            raise HTTPException(
+                status_code=400, 
+                detail="Phone number is required. Please provide a phone number or update your profile."
+            )
+
+        logger.info(f"Using phone number: {phone_number}")
+
         # Format the grocery list as text
         message = f"🛒 *{request.listName}*\n\n"
         incomplete_items = [item for item in request.items if not item.completed]
@@ -83,15 +108,6 @@ async def share_grocery_list(request: ShareListRequest = Body(...)):
                 quantity_text = f" - {item.quantity}" if item.quantity else ""
                 unit_text = f" {item.unit}" if item.unit else ""
                 message += f"• {item.name.capitalize()}{quantity_text}{unit_text}\n"
-        
-        whatsapp_apikey = os.getenv("WHATSAPP_API_KEY")
-        if not whatsapp_apikey:
-            raise HTTPException(status_code=500, detail="CallMeBot API key not configured")
-
-        # Ensure phone number is provided
-        phone_number = request.phoneNumber or os.getenv("WHATSAPP_PHONE_NUMBER")
-        if not phone_number:
-            raise HTTPException(status_code=400, detail="Phone number is required")
 
         # URL encode the message in UTF-8
         encoded_message = urllib.parse.quote(message.encode('utf-8'))
@@ -108,31 +124,48 @@ async def share_grocery_list(request: ShareListRequest = Body(...)):
             raise HTTPException(status_code=500, detail=f"Failed to send WhatsApp message: {response.text}")
 
         return {"success": True, "message": "Grocery list shared via WhatsApp"}
-        
-        # # If we have an SMS gateway configured, send the message via email
-        # if senderEmail and gatewayAddress and APP_KEY:
-        #     msg = EmailMessage()
-        #     msg.set_content(message)
-        #     msg['Subject'] = f"Grocery List: {request.listName}"
-        #     msg['From'] = senderEmail
-        #     msg['To'] = f"{request.phoneNumber}@{gatewayAddress}"
-            
-        #     server = smtplib.SMTP('smtp.gmail.com', 587)
-        #     server.starttls()
-        #     server.login(senderEmail, APP_KEY)
-        #     server.send_message(msg)
-        #     server.quit()
-        # return {"success": True, "message": "Grocery list shared successfully"}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to share grocery list: {str(e)}")
         
 @router.post("/share-multiple-lists")
-async def share_multiple_grocery_lists(request: ShareMultipleListsRequest = Body(...)):
+async def share_multiple_grocery_lists(request: ShareMultipleListsRequest = Body(...), authorization: Optional[str] = Header(None)):
     """
     Share multiple grocery lists via WhatsApp/SMS
     """
     try:
+        logger.info(f"Sharing multiple grocery lists - phoneNumber from request: {request.phoneNumber}")
+        
+        # Get current user
+        user_id = await get_current_user(authorization)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authentication required to share grocery lists")
+
+        # Get user profile to fetch WhatsApp API key
+        user_profile = await get_user_profile(user_id)
+        if not user_profile:
+            raise HTTPException(status_code=404, detail="User profile not found")
+
+        whatsapp_apikey = user_profile.get('whatsapp_api_key')
+        if not whatsapp_apikey:
+            raise HTTPException(
+                status_code=400, 
+                detail="WhatsApp API key not configured in your profile. Please update your profile settings."
+            )
+
+        # Use user's phone number if no phone number provided in request
+        phone_number = request.phoneNumber
+        if not phone_number:
+            phone_number = user_profile.get('phone_number')
+        
+        if not phone_number:
+            raise HTTPException(
+                status_code=400, 
+                detail="Phone number is required. Please provide a phone number or update your profile."
+            )
+
+        logger.info(f"Using phone number for multiple lists: {phone_number}")
+        
         # Format the grocery lists as text
         message = "🛒 *Your Grocery Lists*\n\n"
         
@@ -149,15 +182,6 @@ async def share_multiple_grocery_lists(request: ShareMultipleListsRequest = Body
                     message += f"• {item.name.capitalize()}{quantity_text}{unit_text}\n"
             
             message += "\n"  # Add spacing between lists
-        
-        whatsapp_apikey = os.getenv("WHATSAPP_API_KEY")
-        if not whatsapp_apikey:
-            raise HTTPException(status_code=500, detail="CallMeBot API key not configured")
-
-        # Ensure phone number is provided
-        phone_number = request.phoneNumber or os.getenv("WHATSAPP_PHONE_NUMBER")
-        if not phone_number:
-            raise HTTPException(status_code=400, detail="Phone number is required")
 
         # URL encode the message in UTF-8
         encoded_message = urllib.parse.quote(message.encode('utf-8'))

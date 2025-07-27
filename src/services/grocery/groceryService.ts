@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { GroceryList, GroceryItem, Ingredient } from '../../types/recipe';
+import { apiClient } from '../api/apiClient';
 import { v4 as uuidv4 } from 'uuid';
 
 // Helper function to normalize ingredient names
@@ -550,6 +551,22 @@ export const deleteGroceryItem = async (itemId: string): Promise<void> => {
     throw new Error('Failed to delete grocery item');
   }
 };
+
+/**
+ * Clear all items from a grocery list
+ */
+export const clearAllItemsFromList = async (listId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('grocery_items')
+    .delete()
+    .eq('list_id', listId);
+  
+  if (error) {
+    console.error('Error clearing all items from grocery list:', error);
+    throw new Error('Failed to clear all items from grocery list');
+  }
+};
+
 /**
  * Update a grocery list name
  */
@@ -581,24 +598,13 @@ export const shareGroceryList = async (listId: string, phoneNumber?: string): Pr
     // Get the list with its items
     const list = await getGroceryListById(listId);
     
-    // Call the backend API to send the message
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/share-list`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        listId,
-        listName: list.name,
-        items: list.items,
-        phoneNumber
-      }),
+    // Use the centralized apiClient instead of duplicating fetch logic
+    await apiClient.post('/share-list', {
+      listId,
+      listName: list.name,
+      items: list.items,
+      phoneNumber
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to share grocery list');
-    }
   } catch (err) {
     console.error('Error sharing grocery list:', err);
     throw new Error('Failed to share grocery list');
@@ -613,26 +619,15 @@ export const shareMultipleGroceryLists = async (listIds: string[], phoneNumber?:
     // Get all lists with their items
     const lists = await Promise.all(listIds.map(id => getGroceryListById(id)));
     
-    // Call the backend API to send the message
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/share-multiple-lists`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        lists: lists.map(list => ({
-          listId: list.id,
-          listName: list.name,
-          items: list.items
-        })),
-        phoneNumber
-      }),
+    // Use the centralized apiClient instead of duplicating fetch logic
+    await apiClient.post('/share-multiple-lists', {
+      lists: lists.map(list => ({
+        listId: list.id,
+        listName: list.name,
+        items: list.items
+      })),
+      phoneNumber
     });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to share grocery lists');
-    }
   } catch (err) {
     console.error('Error sharing grocery lists:', err);
     throw new Error('Failed to share grocery lists');

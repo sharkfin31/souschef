@@ -3,7 +3,6 @@ Utility functions for SousChef API
 """
 
 import logging
-import uuid
 from typing import Optional, Any, Dict
 from urllib.parse import urlparse
 
@@ -22,10 +21,6 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     
     return logger
 
-def generate_unique_id() -> str:
-    """Generate a unique identifier"""
-    return str(uuid.uuid4())
-
 def is_valid_url(url: str) -> bool:
     """Validate if a string is a valid URL"""
     try:
@@ -41,13 +36,6 @@ def extract_domain(url: str) -> Optional[str]:
         return parsed.netloc.lower()
     except Exception:
         return None
-
-def sanitize_filename(filename: str) -> str:
-    """Sanitize filename for safe storage"""
-    # Remove or replace unsafe characters
-    import re
-    sanitized = re.sub(r'[^\w\-_\.]', '_', filename)
-    return sanitized[:255]  # Limit length
 
 def format_error_response(message: str, status_code: int, details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Format a consistent error response"""

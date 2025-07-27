@@ -382,7 +382,7 @@ const Profile = () => {
             className={`w-full px-3 py-2 border border-gray-300 rounded-md ${
               isEditingPhone ? 'bg-white' : 'bg-gray-100'
             }`}
-            placeholder="Enter phone number with country code (+1...)"
+            placeholder="+12345678901"
           />
           {isEditingPhone && (
             <p className="text-xs text-gray-500 mt-1">

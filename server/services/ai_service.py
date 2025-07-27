@@ -3,6 +3,10 @@ import re
 import json
 from typing import Optional, Dict, Any
 from config import OPENROUTER_API_KEY
+from utils.helpers import setup_logger
+
+# Setup logging
+logger = setup_logger(__name__)
 
 async def process_with_ai(content: str) -> Optional[Dict[str, Any]]:
     """Process recipe content with OpenRouter AI to extract structured recipe data"""
@@ -14,6 +18,10 @@ IMPORTANT INSTRUCTIONS:
 - For missing timing information, make educated estimates based on cooking methods and ingredients
 - Always provide realistic time estimates even if not explicitly stated
 - Use standard cooking time guidelines for common dishes and techniques
+- For ingredient quantities: Convert ranges to single values (e.g., "1-2 cups" becomes "1.5", "7-8 items" becomes "7")
+- Ensure all numeric fields (prepTime, cookTime, totalTime, servings, stepNumber, timeEstimate) are integers
+- Ingredient quantities should be strings representing single numeric values
+- SERVINGS RULE: ONLY use the exact number if explicitly stated in the recipe. If no serving size is mentioned anywhere in the content, you MUST set servings to 2. Do not estimate or infer servings from ingredient quantities.
 
 Return ONLY a valid JSON object with this EXACT structure:
 {{
@@ -22,12 +30,12 @@ Return ONLY a valid JSON object with this EXACT structure:
   "prepTime": <number>, // Preparation time in minutes (estimate if not provided)
   "cookTime": <number>, // Cooking time in minutes (estimate if not provided)
   "totalTime": <number>, // Total time in minutes (prepTime + cookTime)
-  "servings": <number>, // Number of servings (estimate 4 if not specified)
+  "servings": <number>, // EXACTLY 2 if not explicitly stated in recipe, otherwise use stated number
   "difficulty": "Easy|Medium|Hard", // Based on techniques and ingredient complexity
   "ingredients": [
     {{
       "name": "ingredient name (standardized, no brand names)",
-      "quantity": "numeric value or range", // e.g., "1", "0.5", "1-2"
+      "quantity": "single numeric value as string", // e.g., "1", "0.5", "2" (convert ranges like "1-2" to middle value "1.5")
       "unit": "standard unit" // "cup", "tbsp", "tsp", "g", "kg", "ml", "l", "oz", "lb", null for items
     }}
   ],
@@ -39,8 +47,7 @@ Return ONLY a valid JSON object with this EXACT structure:
     }}
   ],
   "tags": ["cuisine", "dietary_restrictions", "meal_type", "cooking_method", "season", "difficulty"],
-  "nutritionNotes": "Brief notes about nutrition highlights or dietary considerations",
-  "tips": ["cooking tip 1", "cooking tip 2"] // Max 3 practical tips
+  "nutritionNotes": "Brief notes about nutrition highlights or dietary considerations"
 }}
 
 TIME ESTIMATION GUIDELINES:
@@ -65,6 +72,8 @@ TAG CATEGORIES (choose relevant ones):
 
 Content to analyze:
 {content}
+
+CRITICAL REMINDER: For the "servings" field, scan the entire content for explicit serving information like "serves 4", "makes 6 portions", "feeds 8 people", etc. If NO such explicit serving information exists anywhere in the content, you MUST use exactly 2. Do not estimate based on ingredient quantities or recipe size.
 
 Return ONLY the JSON object with no additional text, explanations, or formatting.
 """
@@ -94,7 +103,7 @@ Return ONLY the JSON object with no additional text, explanations, or formatting
             )
             
             if response.status_code != 200:
-                print(f"API Error: {response.status_code} - {response.text}")
+                logger.error(f"API Error: {response.status_code} - {response.text}")
                 return None
                 
             result = response.json()
@@ -106,102 +115,24 @@ Return ONLY the JSON object with no additional text, explanations, or formatting
                 try:
                     parsed_data = json.loads(json_match.group(1))
                     
-                    # Validate required fields and add defaults
-                    validated_data = _validate_and_enhance_recipe_data(parsed_data)
-                    return validated_data
+                    # Safety check: Ensure servings defaults to 2 if not reasonable
+                    if 'servings' not in parsed_data or not isinstance(parsed_data['servings'], int) or parsed_data['servings'] <= 0:
+                        logger.warning(f"Invalid or missing servings value, defaulting to 2")
+                        parsed_data['servings'] = 2
+                    
+                    return parsed_data
                     
                 except json.JSONDecodeError as e:
-                    print(f"JSON parsing error: {e}")
-                    print(f"Raw response: {ai_response}")
+                    logger.error(f"JSON parsing error: {e}")
+                    logger.debug(f"Raw response: {ai_response}")
                     return None
             else:
-                print(f"No JSON found in response: {ai_response}")
+                logger.error(f"No JSON found in response: {ai_response[:200]}...")
                 return None
                 
     except httpx.TimeoutException:
-        print("AI processing timeout")
+        logger.error("AI processing timeout")
         return None
     except Exception as e:
-        print(f"AI processing error: {e}")
+        logger.error(f"AI processing error: {e}")
         return None
-
-
-def _validate_and_enhance_recipe_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and enhance recipe data with defaults and corrections"""
-    
-    # Ensure required fields exist with defaults
-    validated = {
-        "title": data.get("title", "Untitled Recipe").strip(),
-        "description": data.get("description", "A delicious recipe").strip(),
-        "prepTime": _ensure_positive_int(data.get("prepTime"), 15),
-        "cookTime": _ensure_positive_int(data.get("cookTime"), 20),
-        "servings": _ensure_positive_int(data.get("servings"), 4),
-        "difficulty": data.get("difficulty", "Medium") if data.get("difficulty") in ["Easy", "Medium", "Hard"] else "Medium",
-        "ingredients": _validate_ingredients(data.get("ingredients", [])),
-        "instructions": _validate_instructions(data.get("instructions", [])),
-        "tags": _validate_tags(data.get("tags", [])),
-        "nutritionNotes": data.get("nutritionNotes", "").strip(),
-        "tips": data.get("tips", [])[:3] if isinstance(data.get("tips"), list) else []
-    }
-    
-    # Calculate total time
-    validated["totalTime"] = validated["prepTime"] + validated["cookTime"]
-    
-    return validated
-
-
-def _ensure_positive_int(value: Any, default: int) -> int:
-    """Ensure a value is a positive integer, return default if not"""
-    try:
-        num = int(float(value)) if value is not None else default
-        return max(1, num)
-    except (ValueError, TypeError):
-        return default
-
-
-def _validate_ingredients(ingredients: list) -> list:
-    """Validate and clean ingredient list"""
-    validated = []
-    for ingredient in ingredients:
-        if isinstance(ingredient, dict) and ingredient.get("name"):
-            validated.append({
-                "name": ingredient.get("name", "").strip(),
-                "quantity": str(ingredient.get("quantity", "")).strip() or "1",
-                "unit": ingredient.get("unit", "").strip() or None
-            })
-    return validated
-
-
-def _validate_instructions(instructions: list) -> list:
-    """Validate and clean instruction list"""
-    validated = []
-    for i, instruction in enumerate(instructions):
-        if isinstance(instruction, dict) and instruction.get("description"):
-            step_number = instruction.get("stepNumber", i + 1)
-            time_estimate = instruction.get("timeEstimate")
-            
-            validated.append({
-                "stepNumber": _ensure_positive_int(step_number, i + 1),
-                "description": instruction.get("description", "").strip(),
-                "timeEstimate": _ensure_positive_int(time_estimate, None) if time_estimate else None
-            })
-    return validated
-
-
-def _validate_tags(tags: list) -> list:
-    """Validate and clean tags list"""
-    if not isinstance(tags, list):
-        return []
-    
-    # Clean and deduplicate tags
-    validated = []
-    seen = set()
-    
-    for tag in tags:
-        if isinstance(tag, str):
-            clean_tag = tag.strip().title()
-            if clean_tag and clean_tag not in seen and len(clean_tag) <= 50:
-                validated.append(clean_tag)
-                seen.add(clean_tag)
-    
-    return validated[:10]  # Limit to 10 tags

@@ -22,7 +22,7 @@ from services.ai_service import process_with_ai
 from services.db_service import save_recipe_to_db
 from config import UPLOAD_DIR
 from utils.constants import FileConfig, OCRConfig, Messages, StatusCodes
-from utils.helpers import setup_logger, generate_unique_id, sanitize_filename
+from utils.helpers import setup_logger
 
 # Setup logging
 logger = setup_logger(__name__)
@@ -110,11 +110,9 @@ def cleanup_file(file_path: Path) -> None:
     try:
         if file_path.exists():
             file_path.unlink()
-            print(f"Cleaned up file: {file_path}")
+            logger.info(f"Cleaned up file: {file_path}")
     except Exception as e:
-        print(f"Failed to delete {file_path}: {e}")
-
-
+        logger.warning(f"Failed to delete {file_path}: {e}")
 def cleanup_files(file_paths: List[Path]) -> None:
     """Delete multiple files after processing"""
     for file_path in file_paths:
@@ -149,14 +147,14 @@ async def save_uploaded_image(image: UploadFile) -> Tuple[Path, str]:
         await asyncio.sleep(0.1)
         
         image_url = f"/uploads/{unique_filename}"
-        print(f"Saved image: {unique_filename} ({file_path.stat().st_size} bytes)")
+        logger.info(f"Saved image: {unique_filename} ({file_path.stat().st_size} bytes)")
         
         return file_path, image_url
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error saving uploaded image: {e}")
+        logger.error(f"Error saving uploaded image: {e}")
         raise HTTPException(status_code=500, detail="Failed to save image")
 
 
@@ -166,13 +164,13 @@ async def process_and_save_recipe(text: str, source_info: str, image_url: str, i
         if not text.strip():
             raise HTTPException(status_code=400, detail="No text extracted from image(s)")
         
-        print(f"Processing recipe text ({len(text)} characters) with AI...")
+        logger.info(f"Processing recipe text ({len(text)} characters) with AI...")
         recipe_data = await process_with_ai(text)
         
         if not recipe_data:
             raise HTTPException(status_code=500, detail="AI failed to extract recipe information")
         
-        print(f"AI extracted recipe: {recipe_data.get('title', 'Unknown')}")
+        logger.info(f"AI extracted recipe: {recipe_data.get('title', 'Unknown')}")
         
         # Save to database with user association
         recipe_id = await save_recipe_to_db(recipe_data, source_info, image_url, user_id)
@@ -200,7 +198,7 @@ async def process_and_save_recipe(text: str, source_info: str, image_url: str, i
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error processing recipe: {e}")
+        logger.error(f"Error processing recipe: {e}")
         raise HTTPException(status_code=500, detail="Failed to process recipe")
 
 
@@ -226,7 +224,7 @@ async def process_multiple_recipe_images(images: List[UploadFile], background_ta
     primary_image_url: Optional[str] = None
     
     try:
-        print(f"Processing {len(images)} image(s) for recipe extraction...")
+        logger.info(f"Processing {len(images)} image(s) for recipe extraction...")
         
         # Process images efficiently
         if len(images) == 1:
@@ -245,7 +243,7 @@ async def process_multiple_recipe_images(images: List[UploadFile], background_ta
                 if i > 0:
                     await asyncio.sleep(0.3)
                 
-                print(f"Processing image {i+1}/{len(images)}: {image.filename}")
+                logger.info(f"Processing image {i+1}/{len(images)}: {image.filename}")
                 
                 # Save and process image
                 file_path, image_url = await save_uploaded_image(image)
@@ -277,7 +275,7 @@ async def process_multiple_recipe_images(images: List[UploadFile], background_ta
                 detail="No readable text found in the provided image(s). Please ensure images are clear and contain recipe text."
             )
         
-        print(f"Total extracted text: {len(combined_text)} characters")
+        logger.info(f"Total extracted text: {len(combined_text)} characters")
         
         # Process with AI after brief delay
         await asyncio.sleep(0.5)
@@ -311,7 +309,7 @@ async def process_multiple_recipe_images(images: List[UploadFile], background_ta
     except Exception as e:
         # Clean up on unexpected errors
         cleanup_files(saved_files)
-        print(f"Unexpected error processing images: {e}")
+        logger.error(f"Unexpected error processing images: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred during image processing")
     
     saved_files = []

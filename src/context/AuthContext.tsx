@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   error: AuthError | null;
-  signUp: (email: string, password: string, fullName: string, phoneNumber: string) => Promise<{ success: boolean; error: string | null }>;
+  signUp: (email: string, password: string, fullName: string, phoneNumber: string, whatsappApiKey: string) => Promise<{ success: boolean; error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error: string | null }>;
   signOut: () => Promise<{ success: boolean; error: string | null }>;
 }
@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string, phoneNumber: string) => {
+  const signUp = async (email: string, password: string, fullName: string, phoneNumber: string, whatsappApiKey: string) => {
     setError(null);
     setLoading(true);
     
@@ -74,7 +74,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         options: {
           data: {
             full_name: fullName,
-            phone_number: phoneNumber
+            phone_number: phoneNumber,
+            whatsapp_api_key: whatsappApiKey
           }
         }
       });

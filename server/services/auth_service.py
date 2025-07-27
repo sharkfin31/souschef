@@ -1,6 +1,10 @@
 from fastapi import HTTPException, Header
 from typing import Optional
 from config import supabase
+from utils.helpers import setup_logger
+
+# Setup logging
+logger = setup_logger(__name__)
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[str]:
     """Extract user ID from Authorization header"""
@@ -21,7 +25,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Optio
             if user_response and hasattr(user_response, 'user') and user_response.user:
                 return user_response.user.id
         except Exception as e:
-            print(f"Token verification failed: {e}")
+            logger.warn(f"Token verification failed: {e}")
             # Alternative method - try to verify the token manually
             try:
                 import jwt
@@ -41,12 +45,5 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Optio
         return None
         
     except Exception as e:
-        print(f"Error extracting user from token: {e}")
+        logger.error(f"Error extracting user from token: {e}")
         return None
-
-async def require_auth(authorization: Optional[str] = Header(None)) -> str:
-    """Require authentication and return user ID"""
-    user_id = await get_current_user(authorization)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user_id

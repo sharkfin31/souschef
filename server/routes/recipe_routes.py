@@ -15,9 +15,9 @@ from typing import List, Optional
 from models.schemas import InstagramURL
 from services.recipe_extraction_service import recipe_extraction_service
 from services.image_service import process_multiple_recipe_images
-from services.auth_service import get_current_user, require_auth
+from services.auth_service import get_current_user
 from services.db_service import get_user_recipes
-from utils.constants import Messages, StatusCodes, SUPPORTED_RECIPE_DOMAINS
+from utils.constants import Messages, StatusCodes
 from utils.helpers import setup_logger, format_error_response, format_success_response
 
 # Setup logging
@@ -101,6 +101,50 @@ async def extract_recipe_from_images(
             detail=f"Failed to process images: {str(e)}"
         )
 
+@router.post("/extract-pdf")
+async def extract_recipe_from_pdf(
+    pdf: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Extract recipe from uploaded PDF file
+    
+    Supports PDF text extraction and OCR for scanned PDFs.
+    Uses PyPDF2 for text-based PDFs and falls back to OCR for image-based PDFs.
+    """
+    if not pdf:
+        raise HTTPException(
+            status_code=StatusCodes.BAD_REQUEST,
+            detail="No PDF file provided"
+        )
+    
+    # Validate file type
+    if not pdf.content_type or not pdf.content_type.startswith('application/pdf'):
+        raise HTTPException(
+            status_code=StatusCodes.BAD_REQUEST,
+            detail="File must be a PDF"
+        )
+    
+    try:
+        # Get user ID from auth header (optional for now)
+        user_id = await get_current_user(authorization)
+        logger.info(f"Processing PDF file '{pdf.filename}' for user: {user_id}")
+        
+        # Import the PDF processing service
+        from services.pdf_service import process_recipe_pdf
+        result = await process_recipe_pdf(pdf, background_tasks, user_id)
+        
+        logger.info(f"Successfully processed PDF file: {pdf.filename}")
+        return format_success_response(result, Messages.RECIPE_EXTRACTED_SUCCESS)
+        
+    except Exception as e:
+        logger.error(f"Error processing PDF: {str(e)}")
+        raise HTTPException(
+            status_code=StatusCodes.INTERNAL_ERROR,
+            detail=f"Failed to process PDF: {str(e)}"
+        )
+
 @router.get("/recipes")
 async def get_recipes(authorization: Optional[str] = Header(None)):
     """
@@ -130,50 +174,3 @@ async def get_recipes(authorization: Optional[str] = Header(None)):
             status_code=StatusCodes.INTERNAL_ERROR,
             detail="Failed to fetch recipes"
         )
-
-@router.get("/supported-domains")
-async def get_supported_domains():
-    """
-    Get list of well-supported recipe domains
-    
-    Returns information about websites and sources that have 
-    high-quality recipe extraction support.
-    """
-    return format_success_response({
-        "instagram": {
-            "domain": "instagram.com",
-            "supported": True,
-            "notes": "Posts with recipe content in captions"
-        },
-        "recipe_sites": SUPPORTED_RECIPE_DOMAINS,
-        "general_web": {
-            "supported": True,
-            "notes": "Any website with readable recipe content",
-            "confidence": "variable"
-        }
-    }, "Supported domains retrieved successfully")
-
-@router.get("/health")
-async def health_check():
-    """
-    Health check endpoint with service information
-    
-    Returns the operational status of all recipe-related services.
-    """
-    return format_success_response({
-        "status": "healthy",
-        "services": {
-            "recipe_extraction": "active",
-            "instagram_support": "active", 
-            "web_scraping": "active",
-            "image_extraction": "active",
-            "ai_processing": "active"
-        },
-        "supported_sources": [
-            "Instagram posts",
-            "Recipe websites", 
-            "Food blogs",
-            "Image uploads (OCR)"
-        ],
-        "version": "2.0.0"
-    }, "Service health check completed")
