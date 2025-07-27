@@ -1,7 +1,6 @@
 import { Recipe } from '../../types/recipe';
 import { apiClient } from './apiClient';
 
-// Set to false to use real API calls instead of mock data
 const USE_MOCK_DATA = false;
 
 /**
