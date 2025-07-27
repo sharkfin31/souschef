@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: souschef-api
-    env: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    envVars:
-      - key: RENDER
-        value: "true"
