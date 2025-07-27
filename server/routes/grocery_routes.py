@@ -72,8 +72,9 @@ async def share_grocery_list(request: ShareListRequest = Body(...), authorizatio
         if not user_id:
             raise HTTPException(status_code=401, detail="Authentication required to share grocery lists")
 
-        # Get user profile to fetch WhatsApp API key
-        user_profile = await get_user_profile(user_id)
+        # Get user profile to fetch WhatsApp API key (with auth context)
+        auth_token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+        user_profile = await get_user_profile(user_id, auth_token)
         if not user_profile:
             raise HTTPException(status_code=404, detail="User profile not found")
 
@@ -141,8 +142,9 @@ async def share_multiple_grocery_lists(request: ShareMultipleListsRequest = Body
         if not user_id:
             raise HTTPException(status_code=401, detail="Authentication required to share grocery lists")
 
-        # Get user profile to fetch WhatsApp API key
-        user_profile = await get_user_profile(user_id)
+        # Get user profile to fetch WhatsApp API key (with auth context)
+        auth_token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+        user_profile = await get_user_profile(user_id, auth_token)
         if not user_profile:
             raise HTTPException(status_code=404, detail="User profile not found")
 

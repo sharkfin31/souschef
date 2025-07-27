@@ -31,6 +31,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code
 COPY server/ .
 
+# Copy frontend assets for favicon and static files
+COPY src/assets/ ./static/assets/
+
+# Optionally copy built frontend (if you want to serve from backend)
+# COPY dist/ ./static/
+
 # Create uploads directory
 RUN mkdir -p uploads
 

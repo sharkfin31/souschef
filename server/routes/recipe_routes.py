@@ -157,7 +157,9 @@ async def get_recipes(authorization: Optional[str] = Header(None)):
         
         if user_id:
             logger.info(f"Fetching recipes for user: {user_id}")
-            recipes = await get_user_recipes(user_id)
+            # Extract auth token for RLS context
+            auth_token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+            recipes = await get_user_recipes(user_id, auth_token)
             return format_success_response(
                 {"recipes": recipes, "user_specific": True}, 
                 f"Found {len(recipes)} recipes"

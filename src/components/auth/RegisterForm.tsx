@@ -47,12 +47,6 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
       return;
     }
 
-    // Basic validation for WhatsApp API key (should be alphanumeric)
-    if (!whatsappApiKey.trim() || whatsappApiKey.length < 10) {
-      addNotification('error', 'Please enter a valid WhatsApp API key');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {

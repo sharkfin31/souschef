@@ -51,9 +51,18 @@ export const getRecipes = async (): Promise<Recipe[]> => {
  * Fallback method to get recipes directly from Supabase
  */
 const getRecipesFromSupabase = async (): Promise<Recipe[]> => {
+  // Get the current user to filter recipes
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    console.warn('User not authenticated, returning empty recipes');
+    return [];
+  }
+
   const { data, error } = await supabase
     .from('recipes')
     .select('*')
+    .eq('user_id', user.id)  // Filter by current user
     .order('created_at', { ascending: false });
   
   if (error) {
@@ -91,10 +100,18 @@ const getRecipesFromSupabase = async (): Promise<Recipe[]> => {
  * Get a recipe by ID
  */
 export const getRecipeById = async (id: string): Promise<Recipe> => {
+  // Get the current user to verify ownership
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+
   const { data, error } = await supabase
     .from('recipes')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user.id)  // Filter by current user
     .single();
   
   if (error) {
@@ -175,10 +192,18 @@ export const getInstructionsByRecipeId = async (recipeId: string): Promise<Instr
  * Update recipe tags
  */
 export const updateRecipeTags = async (recipeId: string, tags: string[]): Promise<void> => {
+  // Get the current user to verify ownership
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+
   const { error } = await supabase
     .from('recipes')
     .update({ tags })
-    .eq('id', recipeId);
+    .eq('id', recipeId)
+    .eq('user_id', user.id);  // Only update if owned by current user
   
   if (error) {
     console.error('Error updating recipe tags:', error);
@@ -190,10 +215,18 @@ export const updateRecipeTags = async (recipeId: string, tags: string[]): Promis
  * Update recipe title
  */
 export const updateRecipeTitle = async (recipeId: string, title: string): Promise<void> => {
+  // Get the current user to verify ownership
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+
   const { error } = await supabase
     .from('recipes')
     .update({ title })
-    .eq('id', recipeId);
+    .eq('id', recipeId)
+    .eq('user_id', user.id);  // Only update if owned by current user
   
   if (error) {
     console.error('Error updating recipe title:', error);
@@ -205,6 +238,13 @@ export const updateRecipeTitle = async (recipeId: string, title: string): Promis
  * Create a new recipe
  */
 export const createRecipe = async (parsedRecipe: ParsedRecipe, sourceUrl: string): Promise<Recipe> => {
+  // Get the current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+
   const recipeId = uuidv4();
   
   // Insert recipe
@@ -219,7 +259,8 @@ export const createRecipe = async (parsedRecipe: ParsedRecipe, sourceUrl: string
       prep_time: parsedRecipe.prepTime || null,
       cook_time: parsedRecipe.cookTime || null,
       servings: parsedRecipe.servings || null,
-      tags: parsedRecipe.tags || []
+      tags: parsedRecipe.tags || [],
+      user_id: user.id  // Associate with current user
     });
   
   if (recipeError) {
@@ -276,11 +317,19 @@ export const createRecipe = async (parsedRecipe: ParsedRecipe, sourceUrl: string
  */
 export const deleteRecipe = async (recipeId: string): Promise<boolean> => {
   try {
+    // Get the current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      throw new Error('User not authenticated');
+    }
+
     // First verify the recipe exists and belongs to the current user
     const { data: recipe, error: fetchError } = await supabase
       .from('recipes')
       .select('id, user_id')
       .eq('id', recipeId)
+      .eq('user_id', user.id)  // Verify ownership
       .single();
 
     if (fetchError || !recipe) {
@@ -293,7 +342,8 @@ export const deleteRecipe = async (recipeId: string): Promise<boolean> => {
     const { error: deleteError } = await supabase
       .from('recipes')
       .delete()
-      .eq('id', recipeId);
+      .eq('id', recipeId)
+      .eq('user_id', user.id);  // Double-check ownership during delete
 
     if (deleteError) {
       console.error('Error deleting recipe:', deleteError);
