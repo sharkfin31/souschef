@@ -30,24 +30,24 @@ logger = setup_logger(__name__)
 def check_tesseract_installed() -> bool:
     """Check if Tesseract is installed and accessible"""
     try:
-        # On Render deployment, assume Tesseract is available
-        if os.environ.get('RENDER') == 'true':
-            logger.info("Running on Render - assuming Tesseract is available")
-            return True
-            
-        # Check local installation
-        cmd = 'where' if sys.platform.startswith('win') else 'which'
-        result = subprocess.run([cmd, 'tesseract'], capture_output=True, text=True)
+        # Try to run tesseract version command
+        result = subprocess.run(['tesseract', '--version'], 
+                              capture_output=True, text=True, timeout=10)
         
         if result.returncode == 0:
-            # Verify Tesseract works by checking version
-            version_result = subprocess.run(['tesseract', '--version'], capture_output=True, text=True)
-            logger.info(f"Tesseract found: {version_result.stdout.split()[1] if version_result.stdout else 'unknown version'}")
-            return version_result.returncode == 0
-        
-        logger.warning("Tesseract not found in PATH")
+            version_info = result.stdout.strip()
+            logger.info(f"Tesseract found: {version_info.split()[1] if version_info else 'unknown version'}")
+            return True
+        else:
+            logger.error(f"Tesseract command failed: {result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        logger.error("Tesseract command timed out")
         return False
-        
+    except FileNotFoundError:
+        logger.error("Tesseract executable not found in PATH")
+        return False
     except Exception as e:
         logger.error(f"Error checking Tesseract installation: {e}")
         return False

@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+ARCHITECTURE.md
+RENDER_DEPLOYMENT.md
+
+# Environment files
+.env
+.env.local
+.env.example
+
+# Node.js (frontend stuff)
+node_modules
+package-lock.json
+npm-debug.log
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Virtual environments
+souschef_venv
+venv
+env
+
+# Frontend build artifacts
+dist
+build
+.vite
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (don't include in image)
+server/uploads/*
+uploads/*
+
+# Render specific
+render.yaml
