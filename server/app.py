@@ -11,8 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import os
-import sys
-import logging
 from pathlib import Path
 
 # Import routes and configuration directly
@@ -97,22 +95,6 @@ async def read_root():
             "Grocery list sharing"
         ]
     }
-
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    """Serve favicon"""
-    favicon_path = Path("static/assets/favicon.svg")
-    if favicon_path.exists():
-        return FileResponse(favicon_path)
-    return {"message": "Favicon not found"}
-
-@app.get("/src/assets/favicon.svg", include_in_schema=False)
-async def favicon_svg():
-    """Serve favicon.svg from the expected path"""
-    favicon_path = Path("static/assets/favicon.svg")
-    if favicon_path.exists():
-        return FileResponse(favicon_path)
-    return {"message": "Favicon not found"}
 
 @app.get("/health", tags=["monitoring"])
 async def health_check():

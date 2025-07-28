@@ -727,7 +727,7 @@ const DroppableList = ({ list, handleToggleItem, handleDeleteItem, handleMoveIte
       className={`p-4 ${isOver ? 'bg-blue-50' : ''}`}
       style={{ transition: 'background-color 0.2s ease' }}
     >
-      <div className="max-h-[640px] overflow-y-auto pr-4">
+      <div className="max-h-[400px] overflow-y-auto pr-4">
         <ul className="divide-y divide-gray-200 grocery-list">
           {sortedItems.map((item, index) => (
             <DraggableItem 

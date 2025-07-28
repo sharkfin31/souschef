@@ -3,34 +3,137 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getRecipeById, updateRecipeTags, updateRecipeTitle, deleteRecipe } from '../services/recipe/recipeService';
 import { getMasterGroceryList, addIngredientsToList } from '../services/grocery/groceryService';
 import { Recipe } from '../types/recipe';
-import { FaArrowLeft, FaClock, FaUtensils, FaSpinner, FaShoppingBasket, FaInstagram, FaImage, FaLink, FaMinus, FaPlus, FaTags, FaTrash } from 'react-icons/fa';
+import { FaArrowLeft, FaClock, FaUtensils, FaSpinner, FaShoppingBasket, FaImage, FaLink, FaMinus, FaPlus, FaTags, FaTrash, FaFilePdf } from 'react-icons/fa';
 import { FaPen, FaCheck, FaXmark } from "react-icons/fa6"; 
+import { useNotification } from '../context/NotificationContext';
 import '../assets/list-animations.css';
 import '../assets/grocery-animations.css';
 
 const RecipeDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { addNotification } = useNotification();
+  
+  // Recipe state
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Grocery list state
   const [creatingList, setCreatingList] = useState(false);
   const [listCreated, setListCreated] = useState(false);
+  
+  // Servings state
   const [servings, setServings] = useState(2);
   const [originalServings, setOriginalServings] = useState<number | null>(null);
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+  
+  // Tag editing state
   const [editingTags, setEditingTags] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [updatingTags, setUpdatingTags] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  
+  // Title editing state
   const [editingTitle, setEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [updatingTitle, setUpdatingTitle] = useState(false);
+  
+  // Delete state
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Refs
   const newTagInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // ===== HELPER FUNCTIONS =====
   
+  // Helper function to determine recipe source type and display
+  const getRecipeSourceInfo = () => {
+    if (!recipe?.sourceUrl) {
+      return {
+        icon: <FaImage className="mr-1 text-gray-500" />,
+        text: 'Imported from image',
+        isLink: false,
+        href: '#'
+      };
+    }
+
+    const sourceUrl = recipe.sourceUrl.trim();
+    
+    // Check for Instagram - handle different formats
+    if (sourceUrl.includes('instagram.com')) {
+      // Extract the actual Instagram URL from formats like:
+      // "Instagram: @username - https://www.instagram.com/reel/xyz/"
+      // "instagram: @username - https://www.instagram.com/reel/xyz/"
+      const instagramUrlMatch = sourceUrl.match(/(https?:\/\/(?:www\.)?instagram\.com\/[^\s]+)/);
+      const actualUrl = instagramUrlMatch ? instagramUrlMatch[1] : sourceUrl;
+      
+      // Extract username if present
+      const usernameMatch = sourceUrl.match(/@([^\s-]+)/);
+      const username = usernameMatch ? usernameMatch[1] : null;
+      
+      return {
+        text: username ? `@${username}'s Post` : 'Instagram Post',
+        isLink: true,
+        href: actualUrl
+      };
+    }
+    
+    // Check for PDF indicator (if source contains PDF info)
+    if (sourceUrl.toLowerCase().includes('pdf:') || sourceUrl.toLowerCase().includes('.pdf')) {
+      return {
+        icon: <FaFilePdf className="mr-1 text-red-500" />,
+        text: 'Imported from PDF',
+        isLink: false,
+        href: '#'
+      };
+    }
+    
+    // Default web link
+    return {
+      icon: <FaLink className="mr-1 text-blue-500" />,
+      text: 'View Original Recipe',
+      isLink: true,
+      href: sourceUrl.startsWith('http') ? sourceUrl : `https://${sourceUrl}`
+    };
+  };
+
+  // ===== DATA FETCHING =====
+  
+  useEffect(() => {
+    fetchRecipeData();
+  }, [id]);
+
+  const fetchRecipeData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (!id) {
+        setError('Recipe ID not found');
+        setLoading(false);
+        return;
+      }
+
+      const fetchedRecipe = await getRecipeById(id);
+      setRecipe(fetchedRecipe);
+      
+      // Set original servings from the recipe
+      if (fetchedRecipe.servings) {
+        setOriginalServings(fetchedRecipe.servings);
+        setServings(fetchedRecipe.servings);
+      }
+      
+    } catch (err) {
+      console.error('Error fetching recipe:', err);
+      setError('Failed to load recipe. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Common tag suggestions
   const tagSuggestions = [
     // Cuisines
@@ -69,37 +172,8 @@ const RecipeDetail = () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [editingTags, updatingTags]);
-  
-  useEffect(() => {
-    const fetchRecipe = async () => {
-      if (!id) return;
-      
-      setLoading(true);
-      setError(null);
-      
-      try {
-        const data = await getRecipeById(id);
-        setRecipe(data);
-        setNewTitle(data.title); // Initialize title editing state
-        
-        // Initialize servings from recipe if available, otherwise default to 2
-        if (data.servings) {
-          setServings(data.servings);
-          setOriginalServings(data.servings);
-        } else {
-          setServings(2);
-          setOriginalServings(2);
-        }
-      } catch (err) {
-        setError('Failed to fetch recipe. Please try again later.');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchRecipe();
-  }, [id]);
+
+  // ===== UTILITY FUNCTIONS =====
   
   // Compute scaled ingredients dynamically
   const getScaledIngredients = () => {
@@ -147,16 +221,18 @@ const RecipeDetail = () => {
       return 0;
     });
   };
+
+  // ===== EVENT HANDLERS =====
   
+  // Tag Management
   // Handle adding a new tag
   const handleAddTag = () => {
     if (!recipe || !newTag.trim()) return;
     
-    // Check if we've reached the 5-tag limit
-    if (recipe.tags.length >= 5) {
+    // Check if we've reached the 8-tag limit
+    if (recipe.tags.length >= 8) {
       setNewTag('');
-      setError('Maximum of 5 tags allowed per recipe');
-      setTimeout(() => setError(null), 3000); // Clear error after 3 seconds
+      addNotification('warning', 'Maximum of 8 tags allowed per recipe');
       return;
     }
     
@@ -170,6 +246,7 @@ const RecipeDetail = () => {
     // Check if tag already exists (case insensitive)
     if (recipe.tags.some(tag => tag.toLowerCase() === formattedTag.toLowerCase())) {
       setNewTag('');
+      addNotification('info', 'Tag already exists');
       return;
     }
     
@@ -293,10 +370,13 @@ const RecipeDetail = () => {
       
       setListCreated(true);
       
-      // Reset after 3 seconds
+      // Show success notification and navigate to grocery lists page
+      addNotification('success', 'Recipe added to grocery list successfully!');
+      
+      // Navigate to grocery lists page after a short delay
       setTimeout(() => {
-        setListCreated(false);
-      }, 3000);
+        navigate('/grocery-list');
+      }, 1000);
     } catch (err) {
       setError('Failed to add to grocery list. Please try again.');
       console.error(err);
@@ -554,19 +634,15 @@ const RecipeDetail = () => {
                     </div>
                     
                     <div className="flex space-x-1">
-                      {newTag.trim() ? (
-                        <button 
-                          type="submit" 
-                          className="text-primary hover:text-green-600 p-2"
-                          disabled={updatingTags}
-                        >
-                          <FaCheck />
-                        </button>
-                      ) : null}
                       <button 
                         type="button" 
                         onClick={() => {
                           if (updatingTags) return;
+                          // If there's text in the input, add it as a tag first
+                          if (newTag.trim()) {
+                            handleAddTag();
+                          }
+                          // Then save all tags
                           handleSaveTags();
                         }}
                         className="text-primary hover:text-green-600 p-2"
@@ -616,66 +692,32 @@ const RecipeDetail = () => {
           <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
             <p className="text-sm text-gray-500 flex items-center">
               Source:{' '}
-              {recipe.sourceUrl && recipe.sourceUrl.trim() ? (
-                <>
-                  {recipe.sourceUrl.includes('instagram.com') ? (
-                    <FaInstagram className="ml-2 mr-1 text-pink-500" />
-                  ) : recipe.sourceUrl.startsWith('http') ? (
-                    <FaLink className="ml-2 mr-1 text-blue-500" />
-                  ) : (
-                    <FaImage className="ml-2 mr-1 text-gray-500" />
-                  )}
-                  <a
-                    href={
-                      recipe.sourceUrl.startsWith('http') 
-                        ? recipe.sourceUrl 
-                        : recipe.sourceUrl.startsWith('www.') 
-                          ? `https://${recipe.sourceUrl}`
-                          : recipe.sourceUrl.includes('.') 
-                            ? `https://${recipe.sourceUrl}`
-                            : undefined
-                    }
-                    target={
-                      recipe.sourceUrl.startsWith('http') || 
-                      recipe.sourceUrl.startsWith('www.') || 
-                      recipe.sourceUrl.includes('.') 
-                        ? "_blank" 
-                        : "_self"
-                    }
-                    rel={
-                      recipe.sourceUrl.startsWith('http') || 
-                      recipe.sourceUrl.startsWith('www.') || 
-                      recipe.sourceUrl.includes('.') 
-                        ? "noopener noreferrer" 
-                        : undefined
-                    }
-                    className="text-primary hover:underline"
-                    onClick={(e) => {
-                      // If it's not a valid URL, prevent the default behavior
-                      if (!recipe.sourceUrl.startsWith('http') && 
-                          !recipe.sourceUrl.startsWith('www.') && 
-                          !recipe.sourceUrl.includes('.')) {
-                        e.preventDefault();
-                      }
-                    }}
-                  >
-                    {recipe.sourceUrl.includes('instagram.com')
-                      ? 'Instagram Post'
-                      : recipe.sourceUrl.startsWith('http')
-                        ? new URL(recipe.sourceUrl).hostname
-                        : recipe.sourceUrl.startsWith('www.')
-                          ? recipe.sourceUrl
-                          : recipe.sourceUrl.includes('.')
-                            ? recipe.sourceUrl
-                            : recipe.sourceUrl}
-                  </a>
-                </>
-              ) : (
-                <span className="ml-2 flex items-center">
-                  <FaImage className="mr-1 text-gray-500" />
-                  Imported from image
-                </span>
-              )}</p>
+              {(() => {
+                const sourceInfo = getRecipeSourceInfo();
+                return (
+                  <span className="ml-2 flex items-center">
+                    {sourceInfo.icon}
+                    {sourceInfo.isLink ? (
+                      <a
+                        href={sourceInfo.href}
+                        target={sourceInfo.href.startsWith('http') ? "_blank" : "_self"}
+                        rel={sourceInfo.href.startsWith('http') ? "noopener noreferrer" : undefined}
+                        className="text-primary hover:underline"
+                        onClick={(e) => {
+                          if (sourceInfo.href === '#') {
+                            e.preventDefault();
+                          }
+                        }}
+                      >
+                        {sourceInfo.text}
+                      </a>
+                    ) : (
+                      sourceInfo.text
+                    )}
+                  </span>
+                );
+              })()}
+            </p>
             
             <button
               onClick={handleCreateGroceryList}
