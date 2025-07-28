@@ -1,121 +1,56 @@
 # SousChef
 
-SousChef is a recipe management web application that allows you to save and organize recipes from around the web. It can parse recipes from websites and Instagram posts using AI, making it easy to collect and store your favorite recipes in one place.
+SousChef is an intelligent recipe management web application that transforms how you discover, collect, and organize recipes. Using advanced AI technology, it can automatically extract recipes from various sources including websites, Instagram posts, images, and PDF documents, making it effortless to build your personal digital cookbook.
 
-## Features
+## What SousChef Does
 
-- Parse recipes from website URLs using AI
-- Parse recipes from Instagram posts
-- Extract recipes from images using OCR
-- Save recipes to your collection
-- View detailed recipe information including ingredients and instructions
-- Create grocery lists from recipe ingredients
-- Responsive design for mobile and desktop
+### 🔍 **Smart Recipe Discovery & Import**
+- **Website Integration**: Paste any recipe URL and watch SousChef intelligently extract ingredients, instructions, cooking times, and servings
+- **Instagram Recipe Parser**: Import recipes directly from Instagram posts and reels with automatic content extraction
+- **Image-to-Recipe**: Upload photos of recipes from cookbooks, magazines, or handwritten notes - OCR technology converts them to structured recipes
+- **PDF Processing**: Extract recipes from PDF cookbooks and documents with intelligent text recognition
 
-## Tech Stack
+### 📝 **Recipe Management**
+- **Organized Collection**: All your recipes stored in one beautifully organized digital space
+- **Smart Tagging**: Add up to 8 custom tags per recipe for easy categorization (cuisine type, dietary restrictions, meal type, etc.)
+- **Recipe Editing**: Modify titles, update ingredients, edit instructions, and manage tags with intuitive interfaces
+- **Source Tracking**: Maintain links to original sources with automatic detection of recipe origins
 
-### Frontend
-- **Framework**: React, TypeScript, Vite
-- **Styling**: Tailwind CSS
-- **Database**: Supabase
+### 🛒 **Intelligent Grocery Planning**
+- **One-Click Grocery Lists**: Convert any recipe's ingredients into organized shopping lists instantly
+- **Serving Adjustments**: Automatically scale ingredient quantities when you change serving sizes
+- **Multiple List Management**: Create and manage multiple grocery lists for different shopping trips or stores
+- **List Sharing**: Send formatted grocery lists via WhatsApp directly from the app
+- **Smart Organization**: Ingredients automatically grouped and formatted for easy shopping
 
-### Backend
-- **Framework**: FastAPI (Python)
-- **AI Integration**: OpenRouter API (Claude 3)
-- **Image Processing**: Tesseract OCR
-- **Database**: Supabase
+### 📱 **User Experience**
+- **Responsive Design**: Seamlessly works across desktop, tablet, and mobile devices
+- **Intuitive Interface**: Clean, modern design that makes recipe management enjoyable
+- **Fast Performance**: Built with modern web technologies for quick loading and smooth interactions
+- **Real-time Updates**: Changes sync instantly across all your devices
 
-### Deployment
-- **Frontend**: Vercel
-- **Backend**: Render
+## How It Works
 
-## Getting Started
+1. **Import**: Add recipes by pasting URLs, uploading images, or connecting Instagram posts
+2. **AI Processing**: Advanced AI extracts and structures recipe information automatically
+3. **Organize**: Tag and categorize recipes to build your personalized cookbook
+4. **Cook**: Access your recipes anywhere with mobile-friendly viewing
+5. **Shop**: Generate grocery lists with one click and share them via WhatsApp
 
-### Prerequisites
+## Technology Highlights
 
-- Node.js (v14 or higher)
-- Python 3.9 or higher
-- Supabase account
-- OpenRouter API key
-- Tesseract OCR installed
+- **AI-Powered Extraction**: Uses Claude 3 via OpenRouter API for intelligent recipe parsing
+- **OCR Technology**: Tesseract OCR enables text extraction from images and PDFs
+- **Modern Frontend**: React + TypeScript + Vite for fast, type-safe development
+- **Scalable Backend**: FastAPI provides robust, high-performance API services
+- **Cloud Database**: Supabase ensures reliable data storage and real-time synchronization
 
-### Installation
+## Perfect For
 
-#### Frontend
+- **Home Cooks** who want to digitize their recipe collection
+- **Food Enthusiasts** who discover recipes across social media and websites
+- **Meal Planners** who need organized grocery shopping lists
+- **Recipe Collectors** who want to preserve family recipes and cookbook favorites
+- **Busy Professionals** who need quick access to recipes on any device
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/souschef.git
-   cd souschef
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Create a `.env` file based on `.env.example`:
-   ```
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   VITE_API_URL=http://localhost:8000
-   ```
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-#### Backend
-
-1. Navigate to the server directory:
-   ```bash
-   cd server
-   ```
-
-2. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Install Tesseract OCR:
-   - **macOS**: `brew install tesseract`
-   - **Linux**: `sudo apt-get install tesseract-ocr`
-   - **Windows**: Download from [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
-
-4. Create a `.env` file based on `.env.example`:
-   ```
-   INSTAGRAM_USERNAME=your_instagram_username
-   INSTAGRAM_PASSWORD=your_instagram_password
-   OPENROUTER_API_KEY=your_openrouter_api_key
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_KEY=your_supabase_service_key
-   ```
-
-5. Start the backend server:
-   ```bash
-   uvicorn app:app --reload
-   ```
-
-## Deployment
-
-### Frontend (Vercel)
-
-1. Push your code to GitHub
-2. Connect your repository to Vercel
-3. Add environment variables in Vercel dashboard
-4. Deploy!
-
-### Backend (Render)
-
-1. Push your code to GitHub
-2. Create a new Web Service on Render
-3. Connect your repository
-4. Set the build command: `pip install -r server/requirements.txt`
-5. Set the start command: `cd server && uvicorn app:app --host 0.0.0.0 --port $PORT`
-6. Add environment variables
-7. Deploy!
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+SousChef turns the chaos of scattered recipes into an organized, searchable, and shareable digital cookbook that grows with your culinary journey.
