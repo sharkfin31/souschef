@@ -171,7 +171,7 @@ async def share_multiple_grocery_lists(request: ShareMultipleListsRequest = Body
         # Format the grocery lists as text
         message = "🛒 *Your Grocery Lists*\n\n"
         
-        for list_data in request.lists:
+        for i, list_data in enumerate(request.lists):
             message += f"*{list_data.listName}*\n"
             incomplete_items = [item for item in list_data.items if not item.completed]
             
@@ -183,7 +183,9 @@ async def share_multiple_grocery_lists(request: ShareMultipleListsRequest = Body
                     unit_text = f" {item.unit}" if item.unit else ""
                     message += f"• {item.name.capitalize()}{quantity_text}{unit_text}\n"
             
-            message += "\n"  # Add spacing between lists
+            # Only add spacing between lists, not after the last one
+            if i < len(request.lists) - 1:
+                message += "\n"
 
         # URL encode the message in UTF-8
         encoded_message = urllib.parse.quote(message.encode('utf-8'))
