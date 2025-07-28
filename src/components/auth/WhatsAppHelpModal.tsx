@@ -46,7 +46,7 @@ const WhatsAppHelpModal: React.FC<WhatsAppHelpModalProps> = ({ isOpen, onClose }
                 </div>
                 <div>
                   <p className="text-gray-700">
-                    <strong>Add CallMeBot to WhatsApp:</strong> Send a WhatsApp message to <strong>+34 644 81 83 17</strong> with the text: 
+                    <strong>Add CallMeBot to WhatsApp:</strong> Send a WhatsApp message to <strong>+34 644 33 66 63</strong> with the text: 
                     <code className="bg-gray-100 px-2 py-1 rounded text-sm ml-1">I allow callmebot to send me messages</code>
                   </p>
                 </div>
