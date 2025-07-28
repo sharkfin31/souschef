@@ -4,16 +4,16 @@ import { useAuth } from '../context/AuthContext';
 import { Recipe } from '../types/recipe';
 import RecipeCard from '../components/RecipeCard';
 import RecipeImport from '../components/RecipeImport';
-import { FaFilter, FaSearch, FaTimes, FaPlus, FaCheck, FaChevronUp, FaChevronDown, FaTags, FaSpinner, FaExclamationTriangle, FaUtensils } from 'react-icons/fa';
+import { FaFilter, FaSearch, FaTimes, FaPlus, FaChevronUp, FaChevronDown, FaTags, FaSpinner, FaUtensils } from 'react-icons/fa';
+import { useNotification } from '../context/NotificationContext';
 
 const Home = () => {
   const { user } = useAuth();
+  const { addNotification } = useNotification();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
-  const [importSuccess, setImportSuccess] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -24,7 +24,6 @@ const Home = () => {
   
   const fetchRecipes = async () => {
     setLoading(true);
-    setError(null);
     
     try {
       const data = await getRecipes();
@@ -36,7 +35,7 @@ const Home = () => {
       const uniqueTags = [...new Set(allTags)].sort();
       setAvailableTags(uniqueTags);
     } catch (err) {
-      setError('Failed to fetch recipes. Please try again later.');
+      addNotification('error', 'Failed to fetch recipes. Please try again later.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -44,17 +43,10 @@ const Home = () => {
   };
   
   const handleRecipeImported = () => {
-    // Show success notification
-    setImportSuccess(true);
     // Hide import form
     setShowImport(false);
     // Fetch updated recipes
     fetchRecipes();
-    
-    // Hide success notification after 3 seconds
-    setTimeout(() => {
-      setImportSuccess(false);
-    }, 3000);
   };
   
   // Enhanced filtering and sorting logic
@@ -137,13 +129,6 @@ const Home = () => {
   
   return (
     <div>
-      {importSuccess && (
-        <div className="mb-6 bg-green-50 text-green-700 p-4 rounded-md flex items-center">
-          <FaCheck className="mr-2" />
-          Recipe imported successfully!
-        </div>
-      )}
-      
       {/* Recipe Import - Collapsible */}
       <div className="mb-8">
         {showImport ? (
@@ -399,11 +384,6 @@ const Home = () => {
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <FaSpinner className="animate-spin text-primary text-2xl" />
-        </div>
-      ) : error ? (
-        <div className="bg-red-50 text-red-600 p-4 rounded-md flex items-center">
-          <FaExclamationTriangle className="mr-2" />
-          {error}
         </div>
       ) : recipes.length === 0 ? (
         <div className="bg-gray-50 p-8 rounded-md text-center">

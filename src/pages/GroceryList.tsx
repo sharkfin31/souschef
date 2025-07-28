@@ -9,6 +9,7 @@ import { GroceryList as GroceryListType } from '../types/recipe';
 import { FaSpinner, FaShoppingBasket, FaPlus, FaTrash, FaChevronUp, FaShareAlt, FaCheck } from 'react-icons/fa';
 import { FaPen, FaXmark } from "react-icons/fa6";
 import ShareListsModal from '../components/ShareListsModal';
+import { useNotification } from '../context/NotificationContext';
 
 // Helper functions for ingredient normalization
 const normalizeIngredientName = (name: string): string => {
@@ -61,9 +62,9 @@ const getUniqueItemsCount = (items: any[]): number => {
 };
 
 const GroceryList = () => {
+  const { addNotification } = useNotification();
   const [lists, setLists] = useState<GroceryListType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [newListName, setNewListName] = useState('');
   const [creatingList, setCreatingList] = useState(false);
   const [showInput, setShowInput] = useState(false);
@@ -78,7 +79,6 @@ const GroceryList = () => {
   
   const fetchLists = async () => {
     setLoading(true);
-    setError(null);
     
     try {
       const data = await getGroceryLists();
@@ -93,7 +93,7 @@ const GroceryList = () => {
       
       setLists(sortedLists);
     } catch (err) {
-      setError('Failed to fetch grocery lists. Please try again later.');
+      addNotification('error', 'Failed to fetch grocery lists. Please try again later.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -140,9 +140,10 @@ const GroceryList = () => {
       await fetchLists();
       setNewListName('');
       setShowInput(false); // Hide the input after creating a list
+      addNotification('success', 'Grocery list created successfully!');
     } catch (err) {
       console.error('Failed to create list:', err);
-      setError('Failed to create custom list');
+      addNotification('error', 'Failed to create custom list');
     } finally {
       setCreatingList(false);
     }
@@ -183,7 +184,7 @@ const GroceryList = () => {
       }
     } catch (err) {
       console.error('Failed to move item:', err);
-      setError('Failed to move item to another list');
+      addNotification('error', 'Failed to move item to another list');
     }
   };
   
@@ -191,7 +192,7 @@ const GroceryList = () => {
     // Don't allow deleting the master list
     const list = lists.find(l => l.id === listId);
     if (list?.name === 'Master Grocery List') {
-      setError('Cannot delete the master grocery list');
+      addNotification('warning', 'Cannot delete the master grocery list');
       return;
     }
     
@@ -202,9 +203,10 @@ const GroceryList = () => {
       
       // Update local state
       setLists(lists.filter(list => list.id !== listId));
+      addNotification('success', 'Grocery list deleted successfully!');
     } catch (err) {
       console.error('Failed to delete list:', err);
-      setError('Failed to delete grocery list');
+      addNotification('error', 'Failed to delete grocery list');
     } finally {
       setDeletingListId(null);
     }
@@ -244,7 +246,7 @@ const GroceryList = () => {
       setShowClearAllConfirm(null);
     } catch (err) {
       console.error('Failed to clear all items:', err);
-      setError('Failed to clear all items from list');
+      addNotification('error', 'Failed to clear all items from list');
     } finally {
       setClearingAllItems(null);
     }
@@ -270,7 +272,7 @@ const GroceryList = () => {
       setEditingListId(null);
     } catch (err) {
       console.error('Failed to update list name:', err);
-      setError('Failed to update list name');
+      addNotification('error', 'Failed to update list name');
     }
   };
   
@@ -290,12 +292,12 @@ const GroceryList = () => {
       }));
     } catch (err) {
       console.error('Failed to delete item:', err);
-      setError('Failed to delete grocery item');
+      addNotification('error', 'Failed to delete grocery item');
     }
   };
   
   const handleShareMultipleLists = async (listIds: string[], phoneNumber?: string) => {
-    setError(null);
+    // Reset any previous errors and update UI optimistically
     
     try {
       await shareMultipleGroceryLists(listIds, phoneNumber);
@@ -307,7 +309,7 @@ const GroceryList = () => {
       }, 3000);
     } catch (err) {
       console.error('Failed to share lists:', err);
-      setError('Failed to share grocery lists');
+      addNotification('error', 'Failed to share grocery lists');
       throw err;
     }
   };
@@ -509,15 +511,7 @@ const GroceryList = () => {
       </div>
     );
   }
-  
-  if (error) {
-    return (
-      <div className="bg-red-50 text-red-600 p-4 rounded-md">
-        {error}
-      </div>
-    );
-  }
-  
+
   if (shareSuccess) {
     return (
       <div>

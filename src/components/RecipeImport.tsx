@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { FaSpinner, FaLink, FaImage, FaCheck, FaArrowUp, FaArrowDown, FaExclamationCircle, FaFilePdf } from 'react-icons/fa';
+import { FaSpinner, FaLink, FaImage, FaArrowUp, FaArrowDown, FaFilePdf } from 'react-icons/fa';
 import { Recipe } from '../types/recipe';
 import { extractRecipeFromUrl, extractRecipeFromMultipleImages, extractRecipeFromPDF } from '../services/api/recipeApi';
+import { useNotification } from '../context/NotificationContext';
 
 interface RecipeImportProps {
   onRecipeImported: (recipe: Recipe) => void;
 }
 
 const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
+  const { addNotification } = useNotification();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'link' | 'image' | 'pdf'>('link');
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -22,29 +22,26 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
     e.preventDefault();
     
     if (!url) {
-      setError('Please enter a URL');
+      addNotification('warning', 'Please enter a URL');
       return;
     }
     
     setLoading(true);
-    setError(null);
-    setSuccess(false);
     
     try {
       const recipe = await extractRecipeFromUrl(url);
       
-      setSuccess(true);
+      addNotification('success', 'Recipe imported successfully!');
       onRecipeImported(recipe);
       
       // Reset form after a delay
       setTimeout(() => {
         setUrl('');
-        setSuccess(false);
-      }, 2000);
+      }, 1000);
       
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to import recipe');
+      addNotification('error', err instanceof Error ? err.message : 'Failed to import recipe');
     } finally {
       setLoading(false);
     }
@@ -99,31 +96,28 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
     e.preventDefault();
     
     if (images.length === 0) {
-      setError('Please select at least one image');
+      addNotification('warning', 'Please select at least one image');
       return;
     }
     
     setLoading(true);
-    setError(null);
-    setSuccess(false);
     
     try {
       // Use the same endpoint for both single and multiple images
       const recipe = await extractRecipeFromMultipleImages(images);
       
-      setSuccess(true);
+      addNotification('success', 'Recipe imported from image(s) successfully!');
       onRecipeImported(recipe);
       
       // Reset form after a delay
       setTimeout(() => {
         setImages([]);
         setImagePreviews([]);
-        setSuccess(false);
-      }, 2000);
+      }, 1000);
       
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to import recipe from image(s)');
+      addNotification('error', err instanceof Error ? err.message : 'Failed to import recipe from image(s)');
     } finally {
       setLoading(false);
     }
@@ -135,50 +129,46 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
     
     // Validate file type
     if (file.type !== 'application/pdf') {
-      setError('Please select a PDF file');
+      addNotification('error', 'Please select a PDF file');
       return;
     }
     
     // Validate file size (10MB limit)
     if (file.size > 10 * 1024 * 1024) {
-      setError('PDF file must be smaller than 10MB');
+      addNotification('error', 'PDF file must be smaller than 10MB');
       return;
     }
     
     setPdfFile(file);
-    setError(null);
   };
 
   const handlePdfSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!pdfFile) {
-      setError('Please select a PDF file');
+      addNotification('warning', 'Please select a PDF file');
       return;
     }
     
     setLoading(true);
-    setError(null);
-    setSuccess(false);
     
     try {
       const recipe = await extractRecipeFromPDF(pdfFile);
       
-      setSuccess(true);
+      addNotification('success', 'Recipe imported from PDF successfully!');
       onRecipeImported(recipe);
       
       // Reset form after a delay
       setTimeout(() => {
         setPdfFile(null);
-        setSuccess(false);
         // Reset file input
         const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
-      }, 2000);
+      }, 1000);
       
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to import recipe from PDF');
+      addNotification('error', err instanceof Error ? err.message : 'Failed to import recipe from PDF');
     } finally {
       setLoading(false);
     }
@@ -234,17 +224,12 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
           <button
             type="submit"
             className="btn btn-primary w-full"
-            disabled={loading || success}
+            disabled={loading}
           >
             {loading ? (
               <span className="flex items-center justify-center">
                 <FaSpinner className="animate-spin mr-2" />
                 Importing Recipe...
-              </span>
-            ) : success ? (
-              <span className="flex items-center justify-center">
-                <FaCheck className="mr-2" />
-                Recipe Imported!
               </span>
             ) : (
               'Import'
@@ -355,17 +340,12 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
           <button
             type="submit"
             className="btn btn-primary w-full"
-            disabled={loading || success || images.length === 0}
+            disabled={loading || images.length === 0}
           >
             {loading ? (
               <span className="flex items-center justify-center">
                 <FaSpinner className="animate-spin mr-2" />
                 Processing Image...
-              </span>
-            ) : success ? (
-              <span className="flex items-center justify-center">
-                <FaCheck className="mr-2" />
-                Recipe Imported!
               </span>
             ) : (
               'Extract Recipe from Image'
@@ -446,30 +426,18 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
           <button
             type="submit"
             className="btn btn-primary w-full"
-            disabled={loading || success || !pdfFile}
+            disabled={loading || !pdfFile}
           >
             {loading ? (
               <span className="flex items-center justify-center">
                 <FaSpinner className="animate-spin mr-2" />
                 Processing PDF...
               </span>
-            ) : success ? (
-              <span className="flex items-center justify-center">
-                <FaCheck className="mr-2" />
-                Recipe Imported!
-              </span>
             ) : (
               'Extract Recipe from PDF'
             )}
           </button>
         </form>
-      )}
-      
-      {error && (
-        <div className="mt-4 bg-red-50 text-red-600 p-3 rounded-md flex items-center">
-          <FaExclamationCircle className="mr-2 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
       )}
     </div>
   );
