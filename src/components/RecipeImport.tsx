@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { FaSpinner, FaLink, FaImage, FaArrowUp, FaArrowDown, FaFilePdf } from 'react-icons/fa';
+import { FaPen } from 'react-icons/fa6';
 import { Recipe } from '../types/recipe';
-import { extractRecipeFromUrl, extractRecipeFromMultipleImages, extractRecipeFromPDF } from '../services/api/recipeApi';
+import { extractRecipeFromUrl, extractRecipeFromMultipleImages, extractRecipeFromPDF, extractRecipeFromText } from '../services/api/recipeApi';
 import { useNotification } from '../context/NotificationContext';
 
 interface RecipeImportProps {
@@ -12,10 +13,11 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
   const { addNotification } = useNotification();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'link' | 'image' | 'pdf'>('link');
+  const [activeTab, setActiveTab] = useState<'link' | 'image' | 'pdf' | 'text'>('link');
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [recipeText, setRecipeText] = useState('');
 
 
   const handleLinkSubmit = async (e: React.FormEvent) => {
@@ -174,6 +176,35 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
     }
   };
 
+  const handleTextSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!recipeText.trim()) {
+      addNotification('warning', 'Please enter recipe text');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const recipe = await extractRecipeFromText(recipeText);
+      
+      addNotification('success', 'Recipe imported from text successfully!');
+      onRecipeImported(recipe);
+      
+      // Reset form after a delay
+      setTimeout(() => {
+        setRecipeText('');
+      }, 1000);
+      
+    } catch (err) {
+      console.error(err);
+      addNotification('error', err instanceof Error ? err.message : 'Failed to import recipe from text');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold mb-4">Import a Recipe</h2>
@@ -200,6 +231,13 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
         >
           <FaFilePdf className="inline mr-2" />
           From PDF
+        </button>
+        <button
+          className={`py-2 px-4 ${activeTab === 'text' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`}
+          onClick={() => setActiveTab('text')}
+        >
+          <FaPen className="inline mr-2" />
+          From Text
         </button>
       </div>
       
@@ -435,6 +473,43 @@ const RecipeImport = ({ onRecipeImported }: RecipeImportProps) => {
               </span>
             ) : (
               'Extract Recipe from PDF'
+            )}
+          </button>
+        </form>
+      )}
+      
+      {/* Text Import Form */}
+      {activeTab === 'text' && (
+        <form onSubmit={handleTextSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="recipe-text" className="block text-sm font-medium text-gray-700 mb-1">
+              Recipe Text
+            </label>
+            <textarea
+              id="recipe-text"
+              value={recipeText}
+              onChange={(e) => setRecipeText(e.target.value)}
+              placeholder="Paste your recipe text here... Include ingredients, instructions, cooking times, and any other details you have."
+              className="input w-full min-h-[200px] resize-y"
+              disabled={loading}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              AI will automatically extract ingredients, instructions, cooking times, and other recipe details from your text
+            </p>
+          </div>
+          
+          <button
+            type="submit"
+            className="btn btn-primary w-full"
+            disabled={loading || !recipeText.trim()}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <FaSpinner className="animate-spin mr-2" />
+                Processing Text...
+              </span>
+            ) : (
+              'Extract Recipe from Text'
             )}
           </button>
         </form>
