@@ -328,9 +328,67 @@ export const extractRecipeFromPDF = async (pdf: File): Promise<Recipe> => {
   };
 };
 
+/**
+ * Extract recipe from raw text
+ */
+export const extractRecipeFromText = async (text: string): Promise<Recipe> => {
+  const response = USE_MOCK_DATA 
+    ? await new Promise(resolve => {
+        setTimeout(() => {
+          const mockResponse = getMockResponse();
+          mockResponse.data.title = "Mock Recipe from Text";
+          mockResponse.data.source_url = "";
+          mockResponse.data.post_url = "";
+          mockResponse.message = "Recipe extracted from text successfully (MOCK DATA)";
+          resolve(mockResponse);
+        }, 2000);
+      })
+    : await apiClient.post('/extract-text', { 
+        text,
+        instructions: `
+          When extracting ingredients, please normalize units and ingredient names:
+          1. Normalize units: treat similar units as the same (e.g., 'g', 'gm', 'gram', 'grams' should all be 'g').
+          2. Normalize ingredient names: remove unnecessary descriptors (e.g., 'fresh coriander', 'coriander leaves', 'coriander bunch' should all be 'coriander').
+          3. Be consistent with units: use standard abbreviations where possible (g, kg, ml, l, tbsp, tsp, cup).
+          4. Remove qualifiers like 'fresh', 'dried', 'chopped', etc. from ingredient names unless they significantly change the ingredient.
+        `
+      });
+  
+  // Handle nested response structure - extract the actual recipe data
+  const recipeData = response?.data || response;
+  
+  // Validate response structure
+  if (!recipeData || !recipeData.recipe_id) {
+    console.error('❌ Invalid text response structure:', response);
+    throw new Error('Invalid response from server: missing recipe data');
+  }
+  
+  // Format the recipe data for our app
+  return {
+    id: recipeData.recipe_id,
+    title: recipeData.title || 'Untitled Recipe',
+    description: recipeData.description || '',
+    sourceUrl: '',
+    imageUrl: recipeData.image_url || '',
+    ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
+    instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
+      id: crypto.randomUUID(),
+      recipeId: recipeData.recipe_id,
+      stepNumber: inst.stepNumber || (index + 1),
+      description: inst.description || ''
+    })),
+    prepTime: recipeData.prepTime ?? null,
+    cookTime: recipeData.cookTime ?? null,
+    servings: recipeData.servings ?? null,
+    tags: recipeData.tags || ['Uncategorized'],
+    createdAt: new Date().toISOString()
+  };
+};
+
 export const recipeApi = {
   extractRecipeFromUrl,
   extractRecipeFromImage,
   extractRecipeFromMultipleImages,
-  extractRecipeFromPDF
+  extractRecipeFromPDF,
+  extractRecipeFromText
 };

@@ -10,6 +10,7 @@ This module handles all recipe-related API endpoints including:
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Header
 from typing import List, Optional
+from pydantic import BaseModel
 
 # Local imports
 from models.schemas import InstagramURL
@@ -144,6 +145,45 @@ async def extract_recipe_from_pdf(
             status_code=StatusCodes.INTERNAL_ERROR,
             detail=f"Failed to process PDF: {str(e)}"
         )
+
+
+class RecipeText(BaseModel):
+    text: str
+
+
+@router.post("/extract-text")
+async def extract_recipe_from_text(
+    data: RecipeText,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Extract recipe from raw text content
+    
+    Processes pasted recipe text using AI to extract structured recipe data.
+    """
+    if not data.text or not data.text.strip():
+        raise HTTPException(
+            status_code=StatusCodes.BAD_REQUEST,
+            detail="No text content provided"
+        )
+    
+    try:
+        # Get user ID from auth header (optional for now)
+        user_id = await get_current_user(authorization)
+        logger.info(f"Processing text recipe for user: {user_id}")
+        
+        result = await recipe_extraction_service.extract_recipe_from_text(data.text, user_id)
+        
+        logger.info("Successfully processed text recipe")
+        return format_success_response(result, Messages.RECIPE_EXTRACTED_SUCCESS)
+        
+    except Exception as e:
+        logger.error(f"Error processing text recipe: {str(e)}")
+        raise HTTPException(
+            status_code=StatusCodes.INTERNAL_ERROR,
+            detail=f"Failed to process text recipe: {str(e)}"
+        )
+
 
 @router.get("/recipes")
 async def get_recipes(authorization: Optional[str] = Header(None)):
