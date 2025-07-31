@@ -408,6 +408,49 @@ class RecipeExtractionService:
             return urljoin(base_url, img_src)
         except Exception:
             return img_src
+    
+    async def extract_recipe_from_text(self, text: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Extract recipe from raw text content using AI processing
+        """
+        try:
+            if not text or not text.strip():
+                return {"error": "No text content provided"}
+            
+            logger.info(f"Processing text recipe for user: {user_id}")
+            
+            # Process the text content with AI
+            structured_recipe = await process_with_ai(text)
+            
+            if not structured_recipe:
+                return {"error": "Failed to extract recipe from text content"}
+            
+            # Add metadata for text-based extraction
+            structured_recipe.update({
+                "source_url": "Text Input",
+                "post_url": None,
+                "image_url": None,
+                "source": "text",
+                "extracted_via": "text_input"
+            })
+            
+            # Save to database if user is authenticated
+            if user_id:
+                try:
+                    recipe_id = await save_recipe_to_db(structured_recipe, "Text Input", None, user_id)
+                    structured_recipe["recipe_id"] = recipe_id
+                    logger.info(f"Saved text recipe to database with ID: {recipe_id}")
+                except Exception as db_error:
+                    logger.error(f"Failed to save text recipe to database: {db_error}")
+                    # Don't fail the entire request if DB save fails
+                    pass
+            
+            return structured_recipe
+            
+        except Exception as e:
+            logger.error(f"Error extracting recipe from text: {e}")
+            return {"error": f"Failed to process text recipe: {str(e)}"}
+
 
 # Create a singleton instance
 recipe_extraction_service = RecipeExtractionService()
