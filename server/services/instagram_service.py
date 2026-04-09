@@ -45,11 +45,18 @@ def get_apify_client() -> ApifyClientAsync:
     return _apify_client
 
 def extract_apify_video_url(post_data: Dict[str, Any]) -> Optional[str]:
-    """Best-effort video URL from Apify Instagram post payload."""
-    for key in ("videoUrlHD", "videoUrl", "video_url"):
+    """Best-effort video URL from Apify Instagram post payload (actor dataset items)."""
+    for key in ("videoUrlHD", "videoUrl", "video_url", "videoPlaybackUrl"):
         v = post_data.get(key)
         if isinstance(v, str) and v.startswith("http"):
             return v
+    versions = post_data.get("videoVersions")
+    if isinstance(versions, list):
+        for item in reversed(versions):
+            if isinstance(item, dict):
+                u = item.get("url")
+                if isinstance(u, str) and u.startswith("http"):
+                    return u
     return None
 
 

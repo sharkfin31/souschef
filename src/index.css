@@ -47,7 +47,16 @@
     box-shadow: 0 2px 12px rgb(0 0 0 / 0.08);
   }
   .icon-hit:focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2;
+    @apply outline-none ring-0 ring-offset-0;
+  }
+
+  /** Modal action tiles (Recipe Video dialogs): no browser or ring focus chrome */
+  .recipe-modal-tile {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .recipe-modal-tile:focus,
+  .recipe-modal-tile:focus-visible {
+    outline: none !important;
   }
   .icon-hit--destructive:hover {
     @apply text-destructive;

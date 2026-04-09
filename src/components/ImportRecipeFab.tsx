@@ -69,9 +69,10 @@ export function ImportRecipeFab({ open, onOpenChange, onSelectMethod, visible }:
                   onOpenChange(false);
                 }}
                 className={cn(
-                  'inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-background px-5 py-2 text-sm font-medium shadow-sm',
-                  'transition-colors hover:bg-muted/80',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                  'inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-background px-5 py-2 text-sm font-medium text-foreground shadow-sm',
+                  'origin-center transition-transform duration-200 ease-out hover:scale-105',
+                  'hover:border-primary/40 hover:bg-primary hover:text-primary-foreground',
+                  'focus-visible:outline-none focus-visible:ring-0 active:scale-100'
                 )}
               >
                 {m.icon}

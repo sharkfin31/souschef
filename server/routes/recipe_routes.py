@@ -17,9 +17,14 @@ from models.schemas import InstagramURL
 from services.recipe_extraction_service import recipe_extraction_service
 from services.image_service import process_multiple_recipe_images
 from services.auth_service import get_current_user
-from services.db_service import get_user_recipes
+from services.db_service import get_user_recipes, get_user_recipe_by_id
+from services.media_storage_service import (
+    upload_recipe_video_bytes,
+    set_recipe_video_url,
+    MAX_VIDEO_BYTES,
+)
 from utils.constants import Messages, StatusCodes
-from utils.helpers import setup_logger, format_error_response, format_success_response
+from utils.helpers import setup_logger, format_success_response
 
 # Setup logging
 logger = setup_logger(__name__)
@@ -216,3 +221,69 @@ async def get_recipes(authorization: Optional[str] = Header(None)):
             status_code=StatusCodes.INTERNAL_ERROR,
             detail="Failed to fetch recipes"
         )
+
+
+def _auth_token_from_header(authorization: Optional[str]) -> Optional[str]:
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.split(" ", 1)[1].strip() or None
+    return None
+
+
+def _video_extension_from_filename(name: Optional[str]) -> str:
+    if not name or "." not in name:
+        return "mp4"
+    ext = name.rsplit(".", 1)[-1].lower()
+    if ext in ("mp4", "webm", "mov", "m4v"):
+        return ext
+    return "mp4"
+
+
+@router.post("/recipes/{recipe_id}/video/upload")
+async def upload_recipe_video_file(
+    recipe_id: str,
+    video: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Upload a video file; stored on R2 or Supabase Storage, then linked on the recipe."""
+    user_id = await get_current_user(authorization)
+    if not user_id:
+        raise HTTPException(status_code=StatusCodes.UNAUTHORIZED, detail="Authentication required")
+
+    token = _auth_token_from_header(authorization)
+    recipe = await get_user_recipe_by_id(recipe_id, user_id, token)
+    if not recipe:
+        raise HTTPException(status_code=StatusCodes.NOT_FOUND, detail="Recipe not found")
+
+    ctype = (video.content_type or "").lower()
+    if not ctype.startswith("video/"):
+        raise HTTPException(
+            status_code=StatusCodes.BAD_REQUEST,
+            detail="File must be a video (e.g. mp4, webm, mov)",
+        )
+
+    data = await video.read()
+    if len(data) > MAX_VIDEO_BYTES:
+        raise HTTPException(
+            status_code=StatusCodes.BAD_REQUEST,
+            detail=f"Video must be under {MAX_VIDEO_BYTES // (1024 * 1024)} MB",
+        )
+
+    ext = _video_extension_from_filename(video.filename)
+    stored_url = await upload_recipe_video_bytes(
+        recipe_id,
+        user_id,
+        data,
+        recipe_title=recipe.get("title"),
+        file_extension=ext,
+    )
+    if not stored_url:
+        raise HTTPException(
+            status_code=StatusCodes.INTERNAL_ERROR,
+            detail="Video storage is not available or upload failed (check R2 / Supabase configuration and quota)",
+        )
+
+    await set_recipe_video_url(recipe_id, stored_url)
+    return format_success_response(
+        {"video_url": stored_url, "stored_in_bucket": True},
+        "Recipe video uploaded",
+    )

@@ -13,7 +13,10 @@ const tagPillClass =
 
 const RecipeCard = ({ recipe }: RecipeCardProps) => {
   return (
-    <Link to={`/recipe/${recipe.id}`} className="group block h-full outline-none">
+    <Link
+      to={`/recipe/${recipe.id}`}
+      className="group block h-full outline-none focus-visible:outline-none focus-visible:ring-0"
+    >
       <Card
         className={cn(
           'flex h-full flex-col overflow-hidden border border-border shadow-sm ring-0',

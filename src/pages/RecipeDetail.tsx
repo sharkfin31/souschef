@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   getRecipeById,
@@ -6,10 +6,13 @@ import {
   updateRecipeTitle,
   deleteRecipe,
   replaceRecipeInstructions,
+  clearRecipeVideoUrl,
 } from '../services/recipe/recipeService';
+import { uploadRecipeVideoFile } from '../services/api/recipeVideoApi';
 import { getMasterGroceryList, addIngredientsToList } from '../services/grocery/groceryService';
 import { Recipe } from '../types/recipe';
-import { RecipeVideoEmbed } from '@/components/RecipeVideoEmbed';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { ShoppingBasketAdd03Icon } from '@hugeicons/core-free-icons';
 import {
   ArrowLeft,
   ArrowDown,
@@ -22,11 +25,13 @@ import {
   Loader2,
   Minus,
   Pencil,
+  Play,
   Plus,
-  ShoppingBasket,
   Tags,
   Trash2,
+  Upload,
   Utensils,
+  Video,
   X,
 } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
@@ -43,6 +48,8 @@ import {
 import '../assets/list-animations.css';
 import '../assets/grocery-animations.css';
 import { TooltipTrigger } from '@/components/ui/tooltip';
+
+const MAX_RECIPE_VIDEO_BYTES = 50 * 1024 * 1024;
 
 const RecipeDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -71,6 +78,11 @@ const RecipeDetail = () => {
   const [newTitle, setNewTitle] = useState('');
   const [instructionDrafts, setInstructionDrafts] = useState<string[]>([]);
 
+  const [savingVideo, setSavingVideo] = useState(false);
+  const [mediaModalOpen, setMediaModalOpen] = useState(false);
+  const [deleteVideoConfirmOpen, setDeleteVideoConfirmOpen] = useState(false);
+  const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
+
   // Delete state
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -78,6 +90,8 @@ const RecipeDetail = () => {
   // Refs
   const newTagInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
+  const recipeVideoRef = useRef<HTMLVideoElement>(null);
 
   // ===== HELPER FUNCTIONS =====
 
@@ -320,6 +334,83 @@ const RecipeDetail = () => {
     }
   };
 
+  const closeMediaModal = () => {
+    setMediaModalOpen(false);
+    setPendingVideoFile(null);
+    if (videoFileInputRef.current) {
+      videoFileInputRef.current.value = '';
+    }
+  };
+
+  const handleVideoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.size > MAX_RECIPE_VIDEO_BYTES) {
+      addNotification('error', 'Video must be 50 MB or smaller.');
+      e.target.value = '';
+      setPendingVideoFile(null);
+      return;
+    }
+    setPendingVideoFile(file ?? null);
+  };
+
+  const handleSubmitVideoUpload = async () => {
+    if (!id || !pendingVideoFile) {
+      addNotification('warning', 'Choose a video file first.');
+      return;
+    }
+    setSavingVideo(true);
+    try {
+      await uploadRecipeVideoFile(id, pendingVideoFile);
+      const updated = await getRecipeById(id);
+      setRecipe(updated);
+      closeMediaModal();
+      addNotification('success', 'Video uploaded and linked to this recipe.');
+    } catch (err) {
+      addNotification('error', err instanceof Error ? err.message : 'Video upload failed.');
+    } finally {
+      setSavingVideo(false);
+    }
+  };
+
+  const handlePlayRecipeVideoPip = async () => {
+    const v = recipeVideoRef.current;
+    if (!v || !recipe?.videoUrl) return;
+    try {
+      if (document.pictureInPictureElement === v) {
+        await document.exitPictureInPicture();
+        return;
+      }
+      if (!document.pictureInPictureEnabled) {
+        addNotification('warning', 'Picture-in-picture is not supported in this browser.');
+        return;
+      }
+      await v.play();
+      await v.requestPictureInPicture();
+    } catch (err) {
+      addNotification(
+        'error',
+        err instanceof Error ? err.message : 'Could not start picture-in-picture.'
+      );
+    }
+  };
+
+  const handleConfirmDeleteVideo = async () => {
+    if (!id) return;
+    setSavingVideo(true);
+    try {
+      await clearRecipeVideoUrl(id);
+      const updated = await getRecipeById(id);
+      setRecipe(updated);
+      setDeleteVideoConfirmOpen(false);
+      setMediaModalOpen(false);
+      addNotification('success', 'Video removed from this recipe.');
+    } catch (err) {
+      addNotification('error', err instanceof Error ? err.message : 'Failed to remove video.');
+    } finally {
+      setSavingVideo(false);
+    }
+  };
+
   const handleSaveRecipeEdit = async () => {
     if (!recipe || !id) return;
     if (!newTitle.trim()) {
@@ -441,10 +532,10 @@ const RecipeDetail = () => {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between gap-3">
-        <TooltipTrigger label="Back to recipes">
+        <TooltipTrigger label="All recipes">
           <Link
             to="/"
-            className="icon-hit text-primary"
+            className="icon-hit text-muted-foreground hover:text-primary"
             aria-label="Back to recipes"
           >
             <ArrowLeft className="size-5" />
@@ -454,7 +545,7 @@ const RecipeDetail = () => {
         <div className="flex items-center gap-2">
           {isEditingRecipe ? (
             <>
-              <TooltipTrigger label="Save changes">
+              <TooltipTrigger label="Save">
                 <button
                   type="button"
                   onClick={handleSaveRecipeEdit}
@@ -465,7 +556,7 @@ const RecipeDetail = () => {
                   {savingRecipe ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
                 </button>
               </TooltipTrigger>
-              <TooltipTrigger label="Cancel editing">
+              <TooltipTrigger label="Cancel">
                 <button
                   type="button"
                   onClick={handleCancelRecipeEdit}
@@ -489,6 +580,34 @@ const RecipeDetail = () => {
               </button>
             </TooltipTrigger>
           )}
+          {recipe.videoUrl ? (
+            <TooltipTrigger label="Play video">
+              <button
+                type="button"
+                onClick={() => void handlePlayRecipeVideoPip()}
+                disabled={savingRecipe || savingVideo}
+                className="icon-hit text-muted-foreground hover:text-primary disabled:pointer-events-none disabled:opacity-50"
+                aria-label="Play recipe video in picture-in-picture"
+              >
+                <Play className="size-5" />
+              </button>
+            </TooltipTrigger>
+          ) : null}
+          <TooltipTrigger label="Manage media">
+            <button
+              type="button"
+              onClick={() => {
+                setPendingVideoFile(null);
+                if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+                setMediaModalOpen(true);
+              }}
+              disabled={savingRecipe || savingVideo}
+              className="icon-hit text-muted-foreground hover:text-primary disabled:pointer-events-none disabled:opacity-50"
+              aria-label="Add or manage recipe video"
+            >
+              <ImageIcon className="size-5" />
+            </button>
+          </TooltipTrigger>
           <TooltipTrigger label="Delete recipe">
             <button
               type="button"
@@ -521,10 +640,9 @@ const RecipeDetail = () => {
               )}
             </div>
             
-            <div className="flex items-center gap-2 text-foreground">
+            <div className="flex items-center gap-4 text-foreground">
               <Utensils className="size-5 text-primary" />
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Servings</span>
                 <div className="flex items-center rounded-full border border-border bg-muted/30 px-0.5 py-0.5">
                   <TooltipTrigger label="Decrease servings">
                     <button
@@ -556,18 +674,6 @@ const RecipeDetail = () => {
             <p className="text-gray-600 mb-4 text-sm italic">{recipe.description}</p>
           )}
 
-          {recipe.videoUrl ? (
-            <section className="mb-6" aria-labelledby="recipe-video-heading">
-              <h2
-                id="recipe-video-heading"
-                className="mb-2 text-sm font-semibold tracking-tight text-foreground"
-              >
-                Recipe video
-              </h2>
-              <RecipeVideoEmbed src={recipe.videoUrl} poster={recipe.imageUrl} />
-            </section>
-          ) : null}
-          
           {(recipe.prepTime || recipe.cookTime) && (
             <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
               {recipe.prepTime && (
@@ -887,7 +993,13 @@ const RecipeDetail = () => {
                   ) : listCreated ? (
                     <Check className="size-5" aria-hidden />
                   ) : (
-                    <ShoppingBasket className="size-5" aria-hidden />
+                    <HugeiconsIcon
+                      icon={ShoppingBasketAdd03Icon}
+                      size={20}
+                      strokeWidth={1.75}
+                      className="text-current"
+                      aria-hidden
+                    />
                   )}
                 </button>
               </TooltipTrigger>
@@ -895,6 +1007,168 @@ const RecipeDetail = () => {
           </div>
         </div>
       </div>
+
+      <Dialog open={mediaModalOpen} onOpenChange={(open) => !open && closeMediaModal()}>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl" showCloseButton>
+          <div className="border-b border-border bg-muted/40 px-6 py-5">
+            <div className="flex items-center gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
+                <Video className="size-6" aria-hidden />
+              </div>
+              <DialogHeader className="flex flex-1 flex-col justify-center space-y-0 text-left">
+                <DialogTitle className="text-left leading-snug">Manage Recipe Video</DialogTitle>
+              </DialogHeader>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {!recipe.videoUrl ? (
+              <input
+                ref={videoFileInputRef}
+                type="file"
+                accept="video/*,.mp4,.webm,.mov,.m4v"
+                className="sr-only"
+                aria-label="Choose video file"
+                onChange={handleVideoFileChange}
+              />
+            ) : null}
+
+            <div className="grid gap-4">
+              {!recipe.videoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => !savingVideo && videoFileInputRef.current?.click()}
+                  disabled={savingVideo}
+                  className={cn(
+                    'recipe-modal-tile group flex min-h-[8.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/20 p-5 text-center shadow-sm transition',
+                    'hover:border-primary/30 hover:bg-muted/35 hover:shadow-md',
+                    'outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0',
+                    'disabled:pointer-events-none disabled:opacity-50',
+                    'sm:mx-auto sm:max-w-sm'
+                  )}
+                >
+                  <div className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-primary/15">
+                    <Upload className="size-5" aria-hidden />
+                  </div>
+                  <span className="text-sm font-medium tracking-tight text-foreground">Upload</span>
+                  <span className="text-xs text-muted-foreground">New file · up to 50 MB</span>
+                  {pendingVideoFile ? (
+                    <span
+                      className="mt-1 max-w-full truncate px-1 text-[11px] text-muted-foreground"
+                      title={pendingVideoFile.name}
+                    >
+                      {pendingVideoFile.name}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
+
+              {recipe.videoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => !savingVideo && setDeleteVideoConfirmOpen(true)}
+                  disabled={savingVideo}
+                  className={cn(
+                    'recipe-modal-tile group flex min-h-[8.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-destructive/20 bg-destructive/[0.04] p-5 text-center shadow-sm transition',
+                    'hover:border-destructive/35 hover:bg-destructive/[0.07] hover:shadow-md',
+                    'outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0',
+                    'disabled:pointer-events-none disabled:opacity-50',
+                    'sm:mx-auto sm:max-w-sm'
+                  )}
+                >
+                  <div className="flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive transition group-hover:bg-destructive/15">
+                    <Trash2 className="size-5" aria-hidden />
+                  </div>
+                  <span className="text-sm font-medium tracking-tight text-foreground">Remove</span>
+                  <span className="text-xs text-muted-foreground">Unlink from recipe</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {pendingVideoFile && !recipe.videoUrl ? (
+            <div className="flex w-full justify-center border-0 bg-muted/50 p-4">
+              <button
+                type="button"
+                onClick={handleSubmitVideoUpload}
+                disabled={savingVideo || !pendingVideoFile}
+                className="icon-hit text-primary disabled:pointer-events-none disabled:opacity-40"
+                aria-label="Confirm upload"
+              >
+                {savingVideo ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <Check className="size-5" />
+                )}
+              </button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteVideoConfirmOpen}
+        onOpenChange={(open) => !open && !savingVideo && setDeleteVideoConfirmOpen(false)}
+      >
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl" showCloseButton>
+          <div className="border-b border-border bg-muted/40 px-6 py-5">
+            <div className="flex items-center gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-destructive/25 bg-destructive/10 text-destructive shadow-sm">
+                <Trash2 className="size-6" aria-hidden />
+              </div>
+              <DialogHeader className="flex flex-1 flex-col justify-center space-y-0 text-left">
+                <DialogTitle className="text-left leading-snug">Remove video?</DialogTitle>
+              </DialogHeader>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => !savingVideo && setDeleteVideoConfirmOpen(false)}
+                disabled={savingVideo}
+                className={cn(
+                  'recipe-modal-tile group flex min-h-[8.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/20 p-5 text-center shadow-sm transition',
+                  'hover:border-primary/30 hover:bg-muted/35 hover:shadow-md',
+                  'outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0',
+                  'disabled:pointer-events-none disabled:opacity-50'
+                )}
+              >
+                <div className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-primary/15">
+                  <ArrowLeft className="size-5" aria-hidden />
+                </div>
+                <span className="text-sm font-medium tracking-tight text-foreground">Go back</span>
+                <span className="text-xs text-muted-foreground">Keep current video</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!savingVideo) void handleConfirmDeleteVideo();
+                }}
+                disabled={savingVideo}
+                className={cn(
+                  'recipe-modal-tile group flex min-h-[8.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-destructive/20 bg-destructive/[0.04] p-5 text-center shadow-sm transition',
+                  'hover:border-destructive/35 hover:bg-destructive/[0.07] hover:shadow-md',
+                  'outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0',
+                  'disabled:pointer-events-none disabled:opacity-50'
+                )}
+              >
+                <div className="flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive transition group-hover:bg-destructive/15">
+                  {savingVideo ? (
+                    <Loader2 className="size-5 animate-spin" aria-hidden />
+                  ) : (
+                    <Trash2 className="size-5" aria-hidden />
+                  )}
+                </div>
+                <span className="text-sm font-medium tracking-tight text-foreground">Delete</span>
+                <span className="text-xs text-muted-foreground">Unlink from recipe</span>
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showDeleteConfirm} onOpenChange={(open) => !open && !deleting && setShowDeleteConfirm(false)}>
         <DialogContent className="sm:max-w-md" showCloseButton>
@@ -930,6 +1204,18 @@ const RecipeDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {recipe.videoUrl ? (
+        <video
+          ref={recipeVideoRef}
+          src={recipe.videoUrl}
+          poster={recipe.imageUrl ?? undefined}
+          className="pointer-events-none fixed top-0 left-0 h-px w-px overflow-hidden opacity-0"
+          playsInline
+          preload="metadata"
+          aria-hidden
+        />
+      ) : null}
     </div>
   );
 };

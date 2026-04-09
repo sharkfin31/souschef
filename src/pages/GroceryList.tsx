@@ -358,12 +358,13 @@ const GroceryList = () => {
 
             <div className="flex items-center gap-2">
               <div className="create-list-container">
-                <TooltipTrigger label="New grocery list" className="relative h-10 w-10 shrink-0">
+                <TooltipTrigger label="Add" className="relative h-10 w-10 shrink-0">
                   <button
                     type="button"
                     onClick={() => setShowInput(true)}
                     className={cn(
-                      'create-list-button inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      'create-list-button icon-hit text-muted-foreground hover:text-primary shadow-sm',
+                      'focus-visible:outline-none focus-visible:ring-0',
                       showInput && 'hidden'
                     )}
                     aria-label="New grocery list"
@@ -416,11 +417,11 @@ const GroceryList = () => {
               </div>
 
               {lists.length > 0 && (
-                <TooltipTrigger label="Share grocery lists" className="inline-flex items-center self-center">
+                <TooltipTrigger label="Share" className="inline-flex items-center self-center">
                   <button
                     type="button"
                     onClick={() => setShowShareModal(true)}
-                    className="icon-hit text-primary"
+                    className="icon-hit text-muted-foreground hover:text-primary"
                     aria-label="Share grocery lists"
                   >
                     <Share2 className="size-5" />
@@ -522,7 +523,7 @@ const GroceryList = () => {
                 </div>
                 <div className="flex items-center gap-1">
                   {list.name === 'Master Grocery List' && editingListId !== list.id && list.items.length > 0 && (
-                    <TooltipTrigger label="Clear all items">
+                    <TooltipTrigger label="Clear list">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -530,7 +531,7 @@ const GroceryList = () => {
                           setShowClearAllConfirm(list.id);
                         }}
                         disabled={clearingAllItems === list.id}
-                        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-primary-foreground transition-colors duration-150 hover:bg-white hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/50 disabled:opacity-50"
+                        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-primary-foreground transition-colors duration-150 hover:bg-white hover:text-red-600 focus-visible:outline-none focus-visible:ring-0 disabled:opacity-50"
                         aria-label="Clear all items"
                       >
                         {clearingAllItems === list.id ? (
@@ -622,7 +623,7 @@ const GroceryList = () => {
   if (shareSuccess) {
     return (
       <div className="text-foreground">
-        <div className="mb-6 flex items-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm font-medium text-emerald-900 dark:text-emerald-100">
+        <div className="mb-6 flex items-center rounded-lg border border-primary/25 bg-primary/10 p-4 text-sm font-medium text-foreground">
           <Check className="mr-2 size-4 shrink-0" />
           Grocery list shared successfully!
         </div>
@@ -718,20 +719,18 @@ const DraggableItem = ({ item, listId, handleToggleItem, handleDeleteItem }: Dra
       }}
     >
       <div className="flex flex-1 items-center">
-        <TooltipTrigger label={isCompleted ? 'Mark as not done' : 'Mark as done'}>
-          <button
-            type="button"
-            onClick={() => item.id && handleToggleItem(listId, item.id, item.completed)}
-            className={`mr-3 flex size-5 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${isCompleted
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border hover:border-primary/50'
-            }`}
-            disabled={!item.id}
-            aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
-          >
-            {isCompleted && <Check className="size-3" />}
-          </button>
-        </TooltipTrigger>
+        <button
+          type="button"
+          onClick={() => item.id && handleToggleItem(listId, item.id, item.completed)}
+          className={`mr-3 flex size-5 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${isCompleted
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-border hover:border-primary/50'
+          }`}
+          disabled={!item.id}
+          aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+        >
+          {isCompleted && <Check className="size-3" />}
+        </button>
         <div className="flex-1">
           <div className="grid grid-cols-2">
             <span
@@ -759,16 +758,14 @@ const DraggableItem = ({ item, listId, handleToggleItem, handleDeleteItem }: Dra
       
       <div className="ml-2 shrink-0">
         {item.id && (
-          <TooltipTrigger label="Remove item">
-            <button
-              type="button"
-              onClick={() => handleDeleteItem(listId, item.id!)}
-              className="icon-hit text-muted-foreground hover:text-destructive"
-              aria-label="Delete item"
-            >
-              <X className="size-4" />
-            </button>
-          </TooltipTrigger>
+          <button
+            type="button"
+            onClick={() => handleDeleteItem(listId, item.id!)}
+            className="icon-hit text-muted-foreground hover:text-destructive"
+            aria-label="Delete item"
+          >
+            <X className="size-4" />
+          </button>
         )}
       </div>
     </li>

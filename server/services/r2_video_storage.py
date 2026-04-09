@@ -75,7 +75,9 @@ def _object_size_sync(object_key: str) -> int:
         raise
 
 
-def _quota_check_and_upload_sync(object_key: str, body: bytes) -> Tuple[bool, Optional[str]]:
+def _quota_check_and_upload_sync(
+    object_key: str, body: bytes, content_type: str = "video/mp4"
+) -> Tuple[bool, Optional[str]]:
     """
     Returns (ok, public_url_or_none). If quota would be exceeded, returns (False, None).
     """
@@ -114,7 +116,7 @@ def _quota_check_and_upload_sync(object_key: str, body: bytes) -> Tuple[bool, Op
         Bucket=bucket,
         Key=object_key,
         Body=body,
-        ContentType="video/mp4",
+        ContentType=content_type or "video/mp4",
     )
     remaining = cap - projected
     logger.info(
@@ -127,13 +129,17 @@ def _quota_check_and_upload_sync(object_key: str, body: bytes) -> Tuple[bool, Op
     return True, _public_url_for_key(object_key)
 
 
-async def store_recipe_video_bytes(object_key: str, data: bytes) -> Optional[str]:
+async def store_recipe_video_bytes(
+    object_key: str, data: bytes, content_type: str = "video/mp4"
+) -> Optional[str]:
     """
     Upload bytes to R2 if within total storage cap. Returns public URL or None.
     """
     if not is_r2_configured():
         return None
-    ok, url = await asyncio.to_thread(_quota_check_and_upload_sync, object_key, data)
+    ok, url = await asyncio.to_thread(
+        _quota_check_and_upload_sync, object_key, data, content_type
+    )
     if not ok or not url:
         return None
     return url

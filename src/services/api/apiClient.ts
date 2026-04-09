@@ -2,6 +2,26 @@ import { supabase } from '../../lib/supabase';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+async function errorMessageFromResponse(response: Response): Promise<string> {
+  try {
+    const errorData = await response.json();
+    const detail = errorData.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item: { msg?: string }) => item.msg || JSON.stringify(item))
+        .filter(Boolean)
+        .join(' ');
+    }
+    if (errorData.message && typeof errorData.message === 'string') {
+      return errorData.message;
+    }
+    return `Request failed (${response.status})`;
+  } catch {
+    return `Request failed (${response.status})`;
+  }
+}
+
 /**
  * Get authorization headers for authenticated requests
  */
@@ -40,8 +60,7 @@ class ApiClient {
     });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `Failed to fetch from ${endpoint}`);
+      throw new Error(await errorMessageFromResponse(response));
     }
     
     return await response.json();
@@ -63,8 +82,7 @@ class ApiClient {
     });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `Failed to post to ${endpoint}`);
+      throw new Error(await errorMessageFromResponse(response));
     }
     
     return await response.json();
@@ -85,8 +103,7 @@ class ApiClient {
     });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `Failed to post form to ${endpoint}`);
+      throw new Error(await errorMessageFromResponse(response));
     }
     
     return await response.json();

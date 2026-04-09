@@ -269,6 +269,28 @@ export const replaceRecipeInstructions = async (
 };
 
 /**
+ * Clear stored recipe video URL (does not delete objects from R2/Storage).
+ */
+export const clearRecipeVideoUrl = async (recipeId: string): Promise<void> => {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { error } = await supabase
+    .from('recipes')
+    .update({ video_url: null })
+    .eq('id', recipeId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('Error clearing recipe video:', error);
+    throw new Error('Failed to remove video');
+  }
+};
+
+/**
  * Update recipe title
  */
 export const updateRecipeTitle = async (recipeId: string, title: string): Promise<void> => {

@@ -196,7 +196,7 @@ const Home = () => {
       'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
       selectedTagKeys.includes(key)
         ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-        : 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+        : 'border-border/60 bg-muted/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/10 hover:text-primary'
     );
 
   useEffect(() => {
@@ -367,7 +367,7 @@ const Home = () => {
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search recipes by name or description..."
+            placeholder="Search recipes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-10 py-2 pl-10 pr-10 text-base md:text-sm"
