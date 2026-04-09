@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom';
+import type { HTMLAttributes } from 'react';
 import { ShoppingBasket, User } from 'lucide-react';
 import { TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '@/lib/utils';
 
-const Navbar = () => {
+const Navbar = ({ className, ...rest }: HTMLAttributes<HTMLElement>) => {
   const { user, loading } = useAuth();
 
   return (
-    <nav className="border-b border-border bg-card shadow-sm">
+    <nav className={cn('border-b border-border bg-card shadow-sm', className)} {...rest}>
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <Link

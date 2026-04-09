@@ -204,11 +204,7 @@ const Home = () => {
   }, [page, totalPages]);
 
   return (
-    <div
-      className={cn(
-        importFabOpen && 'min-h-[50vh]'
-      )}
-    >
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <RecipeImport
         open={importOpen}
         onOpenChange={(open) => {
@@ -362,7 +358,7 @@ const Home = () => {
       </Dialog>
 
       {/* Search, sort, and filters on one row */}
-      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+      <div className="mb-3 shrink-0 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="relative min-w-0 flex-1 lg:max-w-xl">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -441,12 +437,13 @@ const Home = () => {
         </div>
       </div>
       
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {loading ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden sm:grid-cols-2 lg:grid-cols-3 [grid-auto-rows:minmax(0,1fr)]">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="space-y-3 rounded-xl border border-border bg-card p-0 overflow-hidden">
-              <Skeleton className="h-[5.5rem] w-full rounded-none" />
-              <div className="space-y-2 p-4">
+            <div key={i} className="flex min-h-0 flex-col space-y-3 overflow-hidden rounded-xl border border-border bg-card p-0">
+              <Skeleton className="min-h-0 shrink-0 basis-[30%] w-full rounded-none" />
+              <div className="min-h-0 flex-1 space-y-2 p-4">
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-5/6" />
                 <Skeleton className="mt-3 h-3 w-2/3" />
@@ -455,7 +452,8 @@ const Home = () => {
           ))}
         </div>
       ) : recipes.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-muted-foreground/25 bg-muted/30 p-10 text-center">
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        <div className="w-full max-w-lg rounded-xl border border-dashed border-muted-foreground/25 bg-muted/30 p-10 text-center">
           <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-card shadow-sm">
             <Utensils className="size-8 text-muted-foreground" />
           </div>
@@ -475,30 +473,35 @@ const Home = () => {
             </>
           )}
         </div>
+        </div>
       ) : filteredRecipes.length === 0 ? (
-        <div className="bg-gray-50 p-8 rounded-md text-center">
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        <div className="w-full max-w-lg rounded-xl border border-border bg-muted/30 p-8 text-center">
           <p className="text-gray-600 mb-2 font-medium">No recipes match your current filters.</p>
           <p className="text-gray-500 mb-4">
             Try adjusting your search or filter criteria.
           </p>
           <button
             onClick={clearAllFilters}
-            className="btn btn-secondary inline-flex items-center"
+            className="btn btn-secondary mt-4 inline-flex items-center"
           >
             Clear All Filters
           </button>
         </div>
+        </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <div className="grid h-full min-h-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 [grid-auto-rows:minmax(0,1fr)]">
             {paginatedRecipes.map((recipe) => (
               <RecipeCard key={recipe.id} recipe={recipe} />
             ))}
+            </div>
           </div>
 
           {totalPages > 1 ? (
             <nav
-              className="mt-8 flex flex-wrap items-center justify-center gap-0.5 sm:gap-1"
+              className="flex shrink-0 flex-wrap items-center justify-center gap-0.5 pt-1 sm:gap-1"
               aria-label="Recipe list pagination"
             >
               <button
@@ -552,8 +555,9 @@ const Home = () => {
               </button>
             </nav>
           ) : null}
-        </>
+        </div>
       )}
+      </div>
     </div>
   );
 };

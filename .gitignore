@@ -33,3 +33,4 @@ server/instagram_session.json
 server/images/
 
 node_modules/
+.DS_Store

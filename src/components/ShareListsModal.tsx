@@ -16,9 +16,17 @@ interface ShareModalProps {
   onClose: () => void;
   lists: GroceryListType[];
   onShare: (listIds: string[], phoneNumber?: string) => Promise<void>;
+  /** When the modal opens, pre-check these list ids (e.g. from sidebar share selection). */
+  initialSelectedListIds?: string[];
 }
 
-const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) => {
+const ShareListsModal = ({
+  isOpen,
+  onClose,
+  lists,
+  onShare,
+  initialSelectedListIds = [],
+}: ShareModalProps) => {
   const [selectedLists, setSelectedLists] = useState<string[]>([]);
   const [userPhoneNumber, setUserPhoneNumber] = useState<string>('');
   const [loadingPhone, setLoadingPhone] = useState(false);
@@ -26,12 +34,12 @@ const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) =
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchUserPhoneNumber();
-      setSelectedLists([]);
-      setError(null);
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+    fetchUserPhoneNumber();
+    setSelectedLists([...initialSelectedListIds]);
+    setError(null);
+    // Preselection is applied when the dialog opens; list ids come from parent state at open time.
+  }, [isOpen, initialSelectedListIds]);
 
   const fetchUserPhoneNumber = async () => {
     setLoadingPhone(true);
