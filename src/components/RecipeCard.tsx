@@ -15,32 +15,31 @@ const RecipeCard = ({ recipe }: RecipeCardProps) => {
   return (
     <Link
       to={`/recipe/${recipe.id}`}
-      className="group block h-full min-h-0 max-h-full p-1 outline-none focus-visible:outline-none focus-visible:ring-0"
+      className="group flex h-full min-h-0 w-full min-w-0 p-1 outline-none focus-visible:outline-none focus-visible:ring-0"
     >
       <Card
         className={cn(
-          'relative flex h-full min-h-0 max-h-full flex-col gap-0 overflow-visible rounded-2xl border border-border bg-card py-0',
+          'relative flex h-full min-h-0 w-full flex-col gap-0 overflow-hidden rounded-2xl border border-border bg-card py-0',
           'shadow-sm ring-0 transition-shadow duration-200 hover:shadow-md'
         )}
       >
         <div
           className={cn(
-            'flex min-h-[40%] shrink-0 flex-col justify-center overflow-hidden rounded-t-2xl border-b border-border/60 bg-gradient-to-br from-primary/10 via-muted/80 to-secondary/15 px-2.5 py-2'
+            'flex min-h-[7.2rem] shrink-0 flex-col justify-center overflow-hidden rounded-t-2xl border-b border-border/60 bg-gradient-to-br from-primary/10 via-muted/80 to-secondary/15 px-2.5 py-3'
           )}
         >
           <h3 className="line-clamp-3 text-center text-[1.0625rem] font-semibold leading-snug text-card-foreground group-hover:text-primary">
             {recipe.title}
           </h3>
         </div>
-        <CardContent className="flex min-h-[60%] flex-1 flex-col overflow-hidden rounded-b-2xl p-0">
+        <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl p-0">
           {recipe.description ? (
-            <p className="line-clamp-3 px-4 pt-3 pb-2 text-xs leading-snug text-muted-foreground sm:text-sm">
+            <p className="line-clamp-3 shrink-0 px-4 pt-4 pb-3 text-xs leading-snug text-muted-foreground sm:text-sm">
               {recipe.description}
             </p>
           ) : null}
 
-          {/* Footer: grows into remaining space; content pinned to bottom */}
-          <div className="mt-auto flex flex-2 min-h-[40%] flex-col justify-end gap-2.5 border-t border-border px-4 pb-4 pt-3">
+          <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border px-4 pb-4 pt-4">
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
               {recipe.cookTime ? (
                 <div className="flex items-center gap-1.5">

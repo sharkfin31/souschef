@@ -439,11 +439,14 @@ const Home = () => {
       
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {loading ? (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden sm:grid-cols-2 lg:grid-cols-3 [grid-auto-rows:minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-4 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex min-h-0 flex-col space-y-3 overflow-hidden rounded-xl border border-border bg-card p-0">
-              <Skeleton className="min-h-0 shrink-0 basis-[30%] w-full rounded-none" />
-              <div className="min-h-0 flex-1 space-y-2 p-4">
+            <div
+              key={i}
+              className="flex min-h-[240px] flex-col space-y-3 overflow-hidden rounded-xl border border-border bg-card p-0"
+            >
+              <Skeleton className="h-24 w-full shrink-0 rounded-none rounded-t-xl" />
+              <div className="space-y-2 p-4">
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-5/6" />
                 <Skeleton className="mt-3 h-3 w-2/3" />
@@ -491,11 +494,11 @@ const Home = () => {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <div className="grid h-full min-h-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 [grid-auto-rows:minmax(0,1fr)]">
-            {paginatedRecipes.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} />
-            ))}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 content-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {paginatedRecipes.map((recipe) => (
+                <RecipeCard key={recipe.id} recipe={recipe} />
+              ))}
             </div>
           </div>
 
