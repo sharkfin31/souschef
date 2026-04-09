@@ -1,6 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
-import { DndProvider, useDrag, useDrop } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import '../assets/grocery-animations.css';
 import '../assets/list-animations.css';
 import './GroceryList.css';
@@ -13,11 +11,14 @@ import {
   deleteGroceryItem,
   updateGroceryListName,
   shareMultipleGroceryLists,
-  clearAllItemsFromList,
 } from '../services/grocery/groceryService';
-import { GroceryList as GroceryListType } from '../types/recipe';
+import { GroceryItem, GroceryList as GroceryListType } from '../types/recipe';
 import {
+  ArrowRight,
+  ArrowRightLeft,
   Check,
+  Filter,
+  ListX,
   Loader2,
   Pencil,
   PanelLeftClose,
@@ -134,7 +135,151 @@ const getUniqueItemsCount = (items: any[]): number => {
   ).size;
 };
 
-type BulkMode = 'none' | 'delete' | 'share';
+const GROCERY_TABLE_CLASS =
+  'w-full min-w-0 table-fixed border-collapse text-sm text-foreground';
+
+const collectRecipeFilterOptions = (
+  items: GroceryItem[]
+): { key: string; label: string }[] => {
+  const seen = new Map<string, string>();
+  for (const item of items) {
+    const raw = item.recipeTitle?.trim();
+    if (!raw) {
+      seen.set('__none__', 'No recipe');
+      continue;
+    }
+    const parts = raw.includes(',')
+      ? raw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [raw];
+    for (const part of parts) {
+      if (!seen.has(part)) seen.set(part, part);
+    }
+  }
+  return Array.from(seen.entries())
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+};
+
+const itemMatchesRecipeFilter = (
+  item: { recipeTitle?: string | null },
+  selected: Set<string>
+): boolean => {
+  if (selected.size === 0) return true;
+  const raw = item.recipeTitle?.trim();
+  if (!raw) return selected.has('__none__');
+  const parts = raw.includes(',')
+    ? raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [raw];
+  return parts.some((p) => selected.has(p));
+};
+
+const formatRecipeCell = (recipeTitle: string | null | undefined): string => {
+  if (!recipeTitle?.trim()) return '—';
+  if (recipeTitle.includes(',')) return 'Multiple recipes';
+  return recipeTitle;
+};
+
+const recipeCellTitle = (recipeTitle: string | null | undefined): string | undefined => {
+  if (!recipeTitle?.trim()) return undefined;
+  return recipeTitle.includes(',') ? recipeTitle.split(',').map((s) => s.trim()).join(' · ') : recipeTitle;
+};
+
+/** Sort key for recipe column: empty last, first recipe title when multiple */
+const recipeSortKey = (item: { recipeTitle?: string | null }): string => {
+  const raw = item.recipeTitle?.trim();
+  if (!raw) return '\uffff';
+  if (raw.includes(',')) {
+    const first = raw.split(',')[0]?.trim() || '';
+    return first.toLocaleLowerCase();
+  }
+  return raw.toLocaleLowerCase();
+};
+
+/** Column sort: item cycles default → A–Z → Z–A; recipe toggles default ↔ A–Z; only one “mode” at a time */
+type GroceryListSortState = 'default' | 'item_az' | 'item_za' | 'recipe_az';
+
+function cycleItemColumnSort(prev: GroceryListSortState): GroceryListSortState {
+  if (prev === 'item_az') return 'item_za';
+  if (prev === 'item_za') return 'default';
+  return 'item_az';
+}
+
+function cycleRecipeColumnSort(prev: GroceryListSortState): GroceryListSortState {
+  if (prev === 'recipe_az') return 'default';
+  return 'recipe_az';
+}
+
+function groceryItemSortTooltip(state: GroceryListSortState): string {
+  if (state === 'item_az') return 'Switch to Z–A';
+  if (state === 'item_za') return 'Clear item sort';
+  return 'Sort by item (A–Z)';
+}
+
+function groceryRecipeSortTooltip(state: GroceryListSortState): string {
+  return state === 'recipe_az' ? 'Clear recipe sort' : 'Sort by recipe (A–Z)';
+}
+
+type BulkMode = 'none' | 'delete';
+
+type ItemSelectMode = 'none' | 'move' | 'delete';
+
+interface SidebarListRowProps {
+  list: GroceryListType;
+  isActive: boolean;
+  isMaster: boolean;
+  showCheckbox: boolean;
+  checked: boolean;
+  bulkMode: BulkMode;
+  onClick: () => void;
+}
+
+function SidebarListRow({
+  list,
+  isActive,
+  isMaster,
+  showCheckbox,
+  checked,
+  bulkMode,
+  onClick,
+}: SidebarListRowProps) {
+  return (
+    <li className="rounded-xl">
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-left text-sm transition-all',
+          isActive && bulkMode === 'none'
+            ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary'
+            : 'border-transparent bg-muted/25 text-foreground hover:border-border/80 hover:bg-muted/50',
+          bulkMode !== 'none' && checked && 'border-primary/40 bg-primary/15 text-foreground'
+        )}
+      >
+        {showCheckbox ? (
+          <span
+            className={cn(
+              'flex size-4 shrink-0 items-center justify-center rounded-full border',
+              checked
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-input bg-background',
+              bulkMode === 'delete' && isMaster && 'opacity-40'
+            )}
+            aria-hidden
+          >
+            {checked ? <Check className="size-2.5" strokeWidth={3} /> : null}
+          </span>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate font-medium leading-tight">{list.name}</span>
+      </button>
+    </li>
+  );
+}
 
 const GroceryList = () => {
   const { addNotification } = useNotification();
@@ -148,14 +293,29 @@ const GroceryList = () => {
   const [shareSuccess, setShareSuccess] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareModalInitialIds, setShareModalInitialIds] = useState<string[]>([]);
-  const [clearingAllItems, setClearingAllItems] = useState<string | null>(null);
-  const [showClearAllConfirm, setShowClearAllConfirm] = useState<string | null>(null);
-
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [bulkMode, setBulkMode] = useState<BulkMode>('none');
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  /** Multi-item move: pick destination list (opened after bulk or single selection). */
+  const [moveItemsDialog, setMoveItemsDialog] = useState<{
+    itemIds: string[];
+    sourceListId: string;
+    /** Capitalized ingredient name when exactly one item */
+    primaryLabel?: string;
+  } | null>(null);
+  /** Bulk select rows on the active list for move or delete. */
+  const [itemSelectMode, setItemSelectMode] = useState<ItemSelectMode>('none');
+  const [itemSelectIds, setItemSelectIds] = useState<string[]>([]);
+  const [selectedRecipes, setSelectedRecipes] = useState<Set<string>>(() => new Set());
+  const [grocerySortState, setGrocerySortState] = useState<GroceryListSortState>('default');
+  const [recipeFilterModalOpen, setRecipeFilterModalOpen] = useState(false);
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState<{
+    listId: string;
+    ids: string[];
+  } | null>(null);
+  const [bulkDeletingItems, setBulkDeletingItems] = useState(false);
 
   const fetchLists = async () => {
     setLoading(true);
@@ -195,12 +355,56 @@ const GroceryList = () => {
 
   const activeList = lists.find((l) => l.id === activeListId) ?? null;
 
+  const recipeFilterOptions = useMemo(
+    () => collectRecipeFilterOptions(activeList?.items ?? []),
+    [activeList?.items]
+  );
+
+  const toggleRecipeFilterKey = useCallback((key: string) => {
+    setSelectedRecipes((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const clearRecipeFilters = useCallback(() => setSelectedRecipes(new Set()), []);
+
+  const resetItemSelect = useCallback(() => {
+    setItemSelectMode('none');
+    setItemSelectIds([]);
+  }, []);
+
+  useEffect(() => {
+    resetItemSelect();
+  }, [activeListId, resetItemSelect]);
+
+  useEffect(() => {
+    setSelectedRecipes(new Set());
+  }, [activeListId]);
+
+  const toggleItemSelectId = useCallback((id: string) => {
+    setItemSelectIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
+  const handleSelectAllInViewToggle = useCallback((selectableIds: string[]) => {
+    if (selectableIds.length === 0) return;
+    setItemSelectIds((prev) => {
+      const allSelected = selectableIds.every((id) => prev.includes(id));
+      if (allSelected) return prev.filter((id) => !selectableIds.includes(id));
+      return [...new Set([...prev, ...selectableIds])];
+    });
+  }, []);
+
   const resetBulk = () => {
     setBulkMode('none');
     setBulkSelectedIds([]);
   };
 
-  /** Collapsing the sidebar while in share/delete selection exits that mode (same as cancel). */
+  /** Collapsing the sidebar while in delete selection exits that mode (same as cancel). */
   useEffect(() => {
     if (!sidebarCollapsed || bulkMode === 'none') return;
     setBulkMode('none');
@@ -258,44 +462,6 @@ const GroceryList = () => {
     }
   };
 
-  const handleMoveItem = async (itemId: string, sourceListId: string, targetListId: string) => {
-    try {
-      if (sourceListId === targetListId) return;
-
-      await moveItemToList(itemId, targetListId);
-
-      const sourceList = lists.find((list) => list.id === sourceListId);
-      const targetList = lists.find((list) => list.id === targetListId);
-
-      if (sourceList && targetList) {
-        const movedItem = sourceList.items.find((item) => item.id === itemId);
-
-        if (movedItem) {
-          setLists(
-            lists.map((list) => {
-              if (list.id === sourceListId) {
-                return {
-                  ...list,
-                  items: list.items.filter((item) => item.id !== itemId),
-                };
-              }
-              if (list.id === targetListId) {
-                return {
-                  ...list,
-                  items: [...list.items, { ...movedItem, listId: targetListId }],
-                };
-              }
-              return list;
-            })
-          );
-        }
-      }
-    } catch (err) {
-      console.error('Failed to move item:', err);
-      addNotification('error', 'Failed to move item to another list');
-    }
-  };
-
   const handleConfirmBulkDelete = async () => {
     const ids = bulkSelectedIds.filter((id) => {
       const l = lists.find((x) => x.id === id);
@@ -323,43 +489,17 @@ const GroceryList = () => {
     }
   };
 
-  const handleConfirmBulkShare = () => {
-    if (bulkSelectedIds.length === 0) {
-      addNotification('warning', 'Select at least one list to share.');
-      return;
-    }
-    setShareModalInitialIds([...bulkSelectedIds]);
-    setShowShareModal(true);
+  const openShareModalDirect = () => {
+    if (lists.length === 0) return;
     resetBulk();
+    setShareModalInitialIds(lists.map((l) => l.id));
+    setShowShareModal(true);
+    setShowInput(false);
   };
 
   const handleEditList = (listId: string, currentName: string) => {
     setEditingListId(listId);
     setEditedListName(currentName);
-  };
-
-  const handleClearAllItems = async (listId: string) => {
-    setClearingAllItems(listId);
-
-    try {
-      await clearAllItemsFromList(listId);
-
-      setLists(
-        lists.map((list) => {
-          if (list.id === listId) {
-            return { ...list, items: [] };
-          }
-          return list;
-        })
-      );
-
-      setShowClearAllConfirm(null);
-    } catch (err) {
-      console.error('Failed to clear all items:', err);
-      addNotification('error', 'Failed to clear all items from list');
-    } finally {
-      setClearingAllItems(null);
-    }
   };
 
   const handleSaveListName = async (listId: string) => {
@@ -387,24 +527,62 @@ const GroceryList = () => {
     }
   };
 
-  const handleDeleteItem = async (listId: string, itemId: string) => {
-    try {
-      await deleteGroceryItem(itemId);
+  const handleOpenMoveItemsDialog = () => {
+    if (itemSelectIds.length === 0) {
+      addNotification('warning', 'Select at least one item.');
+      return;
+    }
+    if (!activeList) return;
+    let primaryLabel: string | undefined;
+    if (itemSelectIds.length === 1) {
+      const it = activeList.items.find((i) => i.id === itemSelectIds[0]);
+      if (it?.name) {
+        primaryLabel = it.name.charAt(0).toUpperCase() + it.name.slice(1);
+      }
+    }
+    setMoveItemsDialog({
+      itemIds: [...itemSelectIds],
+      sourceListId: activeList.id,
+      primaryLabel,
+    });
+    resetItemSelect();
+  };
 
-      setLists(
-        lists.map((list) => {
-          if (list.id === listId) {
-            return {
-              ...list,
-              items: list.items.filter((item) => item.id !== itemId),
-            };
-          }
-          return list;
-        })
+  const handleRequestBulkDeleteDialog = () => {
+    if (itemSelectIds.length === 0) {
+      addNotification('warning', 'Select at least one item.');
+      return;
+    }
+    if (!activeList) return;
+    setBulkDeleteDialog({ listId: activeList.id, ids: [...itemSelectIds] });
+    resetItemSelect();
+  };
+
+  const handleExecuteBulkDelete = async () => {
+    if (!bulkDeleteDialog) return;
+    const { listId, ids } = bulkDeleteDialog;
+    setBulkDeletingItems(true);
+    try {
+      await Promise.all(ids.map((id) => deleteGroceryItem(id)));
+      setLists((prev) =>
+        prev.map((list) =>
+          list.id !== listId
+            ? list
+            : { ...list, items: list.items.filter((i) => i.id && !ids.includes(i.id)) }
+        )
       );
+      addNotification(
+        'success',
+        ids.length === 1 ? 'Item removed from list.' : `${ids.length} items removed from list.`
+      );
+      setBulkDeleteDialog(null);
     } catch (err) {
-      console.error('Failed to delete item:', err);
-      addNotification('error', 'Failed to delete grocery item');
+      console.error('Failed to bulk delete items:', err);
+      addNotification('error', 'Failed to delete one or more items.');
+      await fetchLists();
+      setBulkDeleteDialog(null);
+    } finally {
+      setBulkDeletingItems(false);
     }
   };
 
@@ -421,13 +599,6 @@ const GroceryList = () => {
       addNotification('error', 'Failed to share grocery lists');
       throw err;
     }
-  };
-
-  const openShareFromSidebar = () => {
-    if (lists.length === 0) return;
-    setBulkMode('share');
-    setBulkSelectedIds([]);
-    setShowInput(false);
   };
 
   const openDeleteFromSidebar = () => {
@@ -478,33 +649,32 @@ const GroceryList = () => {
     return (
       <aside
         className={cn(
-          'z-30 flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/90 ring-1 ring-black/[0.04] shadow-[4px_6px_18px_-6px_rgba(0,0,0,0.07)] backdrop-blur-xl backdrop-saturate-150 transition-[width] duration-300 ease-out dark:ring-white/[0.06] dark:shadow-[4px_8px_22px_-4px_rgba(0,0,0,0.35)]',
+          'z-30 flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-[4px_6px_18px_-6px_rgba(0,0,0,0.06)] transition-[width] duration-300 ease-out dark:shadow-[4px_8px_22px_-4px_rgba(0,0,0,0.25)]',
           sidebarCollapsed ? 'w-14' : 'w-72 max-w-[min(18rem,calc(100vw-2rem))]'
         )}
         aria-label="Grocery lists"
       >
         {/* Separator always directly under the toggle row (collapsed or expanded). */}
-        <div className="shrink-0 border-b border-border/60 px-3 py-2.5">
+        <div className="shrink-0 border-b border-border/60 px-3 py-4">
           <div
             className={cn(
               'flex',
               sidebarCollapsed ? 'justify-center' : 'flex-row items-center justify-between gap-2'
             )}
           >
-            <TooltipTrigger label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed((c) => !c)}
-                className="icon-hit shrink-0 text-muted-foreground hover:text-foreground"
-                aria-expanded={!sidebarCollapsed}
-              >
-                {sidebarCollapsed ? (
-                  <PanelLeftOpen className="size-5" strokeWidth={1.75} />
-                ) : (
-                  <PanelLeftClose className="size-5" strokeWidth={1.75} />
-                )}
-              </button>
-            </TooltipTrigger>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              className="icon-hit shrink-0 text-muted-foreground hover:text-foreground"
+              aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="size-5" strokeWidth={1.75} />
+              ) : (
+                <PanelLeftClose className="size-5" strokeWidth={1.75} />
+              )}
+            </button>
             {!sidebarCollapsed ? (
               <div className="flex items-center justify-end gap-1.5">
                 <TooltipTrigger label="New list">
@@ -531,10 +701,10 @@ const GroceryList = () => {
                       if (bulkMode === 'delete') resetBulk();
                       else openDeleteFromSidebar();
                     }}
-                    disabled={lists.length === 0 || bulkMode === 'share'}
+                    disabled={lists.length === 0}
                     className={cn(
                       sidebarIcon(bulkMode === 'delete', 'delete'),
-                      (lists.length === 0 || bulkMode === 'share') && 'pointer-events-none opacity-40'
+                      lists.length === 0 && 'pointer-events-none opacity-40'
                     )}
                     aria-label="Delete lists"
                   >
@@ -547,7 +717,7 @@ const GroceryList = () => {
         </div>
 
         {sidebarCollapsed ? (
-          <div className="flex shrink-0 flex-col items-center gap-2 px-3 py-2.5">
+          <div className="flex shrink-0 flex-col items-center gap-2 px-3 py-4">
             <TooltipTrigger label="New list">
               <button
                 type="button"
@@ -570,10 +740,10 @@ const GroceryList = () => {
                   else openDeleteFromSidebar();
                   setSidebarCollapsed(false);
                 }}
-                disabled={lists.length === 0 || bulkMode === 'share'}
+                disabled={lists.length === 0}
                 className={cn(
                   sidebarIcon(bulkMode === 'delete', 'delete'),
-                  (lists.length === 0 || bulkMode === 'share') && 'pointer-events-none opacity-40'
+                  lists.length === 0 && 'pointer-events-none opacity-40'
                 )}
                 aria-label="Delete lists"
               >
@@ -584,13 +754,12 @@ const GroceryList = () => {
               <button
                 type="button"
                 onClick={() => {
-                  if (bulkMode === 'share') resetBulk();
-                  else openShareFromSidebar();
+                  openShareModalDirect();
                   setSidebarCollapsed(false);
                 }}
                 disabled={lists.length === 0 || bulkMode === 'delete'}
                 className={cn(
-                  sidebarIcon(bulkMode === 'share', 'share'),
+                  sidebarIcon(false, 'share'),
                   (lists.length === 0 || bulkMode === 'delete') && 'pointer-events-none opacity-40'
                 )}
                 aria-label="Share lists"
@@ -654,52 +823,27 @@ const GroceryList = () => {
                 {lists.map((list) => {
                   const isActive = list.id === activeListId;
                   const isMaster = list.name === 'Master Grocery List';
-                  const showCheckbox = bulkMode === 'delete' || bulkMode === 'share';
+                  const showCheckbox = bulkMode === 'delete';
                   const checked = bulkSelectedIds.includes(list.id);
 
                   return (
-                    <li key={list.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (bulkMode === 'delete') {
-                            if (isMaster) return;
-                            toggleBulkId(list.id);
-                            return;
-                          }
-                          if (bulkMode === 'share') {
-                            toggleBulkId(list.id);
-                            return;
-                          }
-                          setActiveListId(list.id);
-                        }}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-left text-sm transition-all',
-                          isActive && bulkMode === 'none'
-                            ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary'
-                            : 'border-transparent bg-muted/25 text-foreground hover:border-border/80 hover:bg-muted/50',
-                          bulkMode !== 'none' && checked && 'border-primary/40 bg-primary/15 text-foreground'
-                        )}
-                      >
-                        {showCheckbox ? (
-                          <span
-                            className={cn(
-                              'flex size-4 shrink-0 items-center justify-center rounded-full border',
-                              checked
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-input bg-background',
-                              bulkMode === 'delete' && isMaster && 'opacity-40'
-                            )}
-                            aria-hidden
-                          >
-                            {checked ? <Check className="size-2.5" strokeWidth={3} /> : null}
-                          </span>
-                        ) : null}
-                        <span className="min-w-0 flex-1 truncate font-medium leading-tight">
-                          {list.name}
-                        </span>
-                      </button>
-                    </li>
+                    <SidebarListRow
+                      key={list.id}
+                      list={list}
+                      isActive={isActive}
+                      isMaster={isMaster}
+                      showCheckbox={showCheckbox}
+                      checked={checked}
+                      bulkMode={bulkMode}
+                      onClick={() => {
+                        if (bulkMode === 'delete') {
+                          if (isMaster) return;
+                          toggleBulkId(list.id);
+                          return;
+                        }
+                        setActiveListId(list.id);
+                      }}
+                    />
                   );
                 })}
               </ul>
@@ -727,35 +871,21 @@ const GroceryList = () => {
                     <X className="size-5" strokeWidth={1.75} />
                   </button>
                 </TooltipTrigger>
-                {bulkMode === 'delete' ? (
-                  <TooltipTrigger label="Confirm delete">
-                    <button
-                      type="button"
-                      onClick={handleConfirmBulkDelete}
-                      disabled={bulkDeleting || !deletableSelected}
-                      className="icon-hit icon-hit--destructive text-destructive disabled:pointer-events-none disabled:opacity-40"
-                      aria-label="Confirm delete"
-                    >
-                      {bulkDeleting ? (
-                        <Loader2 className="size-5 animate-spin" />
-                      ) : (
-                        <Check className="size-5" strokeWidth={1.75} />
-                      )}
-                    </button>
-                  </TooltipTrigger>
-                ) : (
-                  <TooltipTrigger label="Confirm share">
-                    <button
-                      type="button"
-                      onClick={handleConfirmBulkShare}
-                      disabled={bulkSelectedIds.length === 0}
-                      className="icon-hit text-primary disabled:pointer-events-none disabled:opacity-40"
-                      aria-label="Confirm share"
-                    >
-                      <Check className="size-5" strokeWidth={1.75} />
-                    </button>
-                  </TooltipTrigger>
-                )}
+                <TooltipTrigger label="Confirm delete">
+                  <button
+                    type="button"
+                    onClick={handleConfirmBulkDelete}
+                    disabled={bulkDeleting || !deletableSelected}
+                    className="icon-hit text-primary disabled:pointer-events-none disabled:opacity-40"
+                    aria-label="Confirm delete"
+                  >
+                    {bulkDeleting ? (
+                      <Loader2 className="size-5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-5" strokeWidth={1.75} />
+                    )}
+                  </button>
+                </TooltipTrigger>
               </div>
             ) : (
               <div className="flex justify-center">
@@ -763,7 +893,7 @@ const GroceryList = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      openShareFromSidebar();
+                      openShareModalDirect();
                       setSidebarCollapsed(false);
                     }}
                     disabled={lists.length === 0}
@@ -787,42 +917,33 @@ const GroceryList = () => {
   const renderMainListCard = () => {
     if (!activeList) return null;
     const list = activeList;
+    const isMaster = list.name === 'Master Grocery List';
+    const selecting = itemSelectMode !== 'none';
+    const canMoveToAnotherList = lists.filter((l) => l.id !== list.id).length > 0;
+
+    const toneIcon = cn(
+      'icon-hit shrink-0 rounded-full text-primary-foreground transition-colors',
+      'hover:bg-primary-foreground/15 hover:text-primary hover:ring-1 hover:ring-primary-foreground/35'
+    );
 
     return (
       <div className="flex min-h-0 h-full min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[3px_5px_16px_-6px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04] dark:shadow-[3px_6px_18px_-4px_rgba(0,0,0,0.28)] dark:ring-white/[0.06]">
-        <div
-          className={cn(
-            list.name === 'Master Grocery List'
-              ? 'bg-primary text-primary-foreground'
-              : 'border-b-2 border-primary/40 bg-muted text-foreground',
-            'flex shrink-0 items-center justify-between px-4 py-5 transition-colors duration-200'
-          )}
-        >
-          <div className="min-w-0 flex-grow">
+        <div className="flex shrink-0 items-center gap-3 border-b-2 border-primary/30 bg-primary px-4 py-4 text-primary-foreground transition-colors duration-200">
+          <div className="min-w-0 flex-1">
             {editingListId === list.id ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   value={editedListName}
                   onChange={(e) => setEditedListName(e.target.value)}
-                  className={cn(
-                    'min-w-0 flex-1 rounded border px-2 py-1 text-sm focus:outline-none',
-                    list.name === 'Master Grocery List'
-                      ? 'border-white/50 bg-transparent text-primary-foreground placeholder:text-primary-foreground/70 focus:border-white'
-                      : 'border-border bg-background text-foreground'
-                  )}
+                  className="min-w-0 flex-1 rounded border border-white/50 bg-transparent px-2 py-1 text-sm text-primary-foreground placeholder:text-primary-foreground/70 focus:border-white focus:outline-none"
                   autoFocus
                 />
                 <TooltipTrigger label="Save list name">
                   <button
                     type="button"
                     onClick={() => handleSaveListName(list.id)}
-                    className={cn(
-                      'icon-hit shrink-0',
-                      list.name === 'Master Grocery List'
-                        ? 'text-primary-foreground'
-                        : 'text-foreground hover:text-primary'
-                    )}
+                    className={toneIcon}
                     aria-label="Save list name"
                   >
                     <Check className="size-4" />
@@ -832,12 +953,7 @@ const GroceryList = () => {
                   <button
                     type="button"
                     onClick={() => setEditingListId(null)}
-                    className={cn(
-                      'icon-hit shrink-0',
-                      list.name === 'Master Grocery List'
-                        ? 'text-primary-foreground'
-                        : 'text-muted-foreground hover:text-destructive'
-                    )}
+                    className={toneIcon}
                     aria-label="Cancel editing"
                   >
                     <X className="size-4" />
@@ -845,21 +961,14 @@ const GroceryList = () => {
                 </TooltipTrigger>
               </div>
             ) : (
-              <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold leading-tight">
-                <span className="min-w-0">{list.name}</span>
+              <h2 className="flex min-w-0 flex-wrap items-center gap-2 text-lg font-semibold leading-tight">
+                <span className="min-w-0 truncate">{list.name}</span>
                 {(() => {
                   const uniqueCount = getUniqueItemsCount(list.items);
 
                   if (uniqueCount !== list.items.length) {
                     return (
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-sm',
-                          list.name === 'Master Grocery List'
-                            ? 'bg-primary-foreground/20'
-                            : 'bg-foreground/10 text-muted-foreground'
-                        )}
-                      >
+                      <span className="shrink-0 rounded-full bg-primary-foreground/20 px-2 py-0.5 text-sm">
                         {uniqueCount} unique / {list.items.length} total
                       </span>
                     );
@@ -869,48 +978,126 @@ const GroceryList = () => {
               </h2>
             )}
           </div>
-          <div className="ml-2 flex shrink-0 items-center gap-1">
-            {list.name === 'Master Grocery List' && editingListId !== list.id && list.items.length > 0 && (
-              <TooltipTrigger label="Clear list">
-                <button
-                  type="button"
-                  onClick={() => setShowClearAllConfirm(list.id)}
-                  disabled={clearingAllItems === list.id}
-                  className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-primary-foreground transition-colors duration-150 hover:bg-white hover:text-red-600 focus-visible:outline-none focus-visible:ring-0 disabled:opacity-50"
-                  aria-label="Clear all items"
-                >
-                  {clearingAllItems === list.id ? (
-                    <Loader2 className="size-4 animate-spin text-primary-foreground" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
-                </button>
-              </TooltipTrigger>
-            )}
-            {list.name !== 'Master Grocery List' && editingListId !== list.id && (
+          {editingListId !== list.id && list.items.length > 0 ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+              {selecting ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={resetItemSelect}
+                    className={toneIcon}
+                    aria-label="Cancel selection"
+                  >
+                    <X className="size-5" strokeWidth={1.75} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (itemSelectMode === 'move') handleOpenMoveItemsDialog();
+                      else if (itemSelectMode === 'delete') handleRequestBulkDeleteDialog();
+                    }}
+                    disabled={itemSelectIds.length === 0}
+                    className={toneIcon}
+                    aria-label={
+                      itemSelectMode === 'move' ? 'Choose destination list' : 'Review delete'
+                    }
+                  >
+                    {itemSelectMode === 'delete' ? (
+                      <Trash2 className="size-5" strokeWidth={1.75} />
+                    ) : (
+                      <ArrowRight className="size-5" strokeWidth={1.75} />
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {recipeFilterOptions.length > 0 ? (
+                    <TooltipTrigger label="Filter by recipe">
+                      <button
+                        type="button"
+                        onClick={() => setRecipeFilterModalOpen(true)}
+                        className={cn(toneIcon, 'relative')}
+                        aria-label="Filter by recipe"
+                      >
+                        <Filter className="size-5" strokeWidth={1.75} />
+                        {selectedRecipes.size > 0 ? (
+                          <span className="absolute -right-0.5 -top-0.5 flex size-2 rounded-full bg-primary-foreground" />
+                        ) : null}
+                      </button>
+                    </TooltipTrigger>
+                  ) : null}
+                  {canMoveToAnotherList ? (
+                    <TooltipTrigger label="Move items">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setItemSelectMode('move');
+                          setItemSelectIds([]);
+                        }}
+                        className={toneIcon}
+                        aria-label="Select items to move"
+                      >
+                        <ArrowRightLeft className="size-5" strokeWidth={1.75} />
+                      </button>
+                    </TooltipTrigger>
+                  ) : null}
+                  <TooltipTrigger label="Delete items">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setItemSelectMode('delete');
+                        setItemSelectIds([]);
+                      }}
+                      className={toneIcon}
+                      aria-label="Select items to delete"
+                    >
+                      <ListX className="size-5" strokeWidth={1.75} />
+                    </button>
+                  </TooltipTrigger>
+                  {!isMaster ? (
+                    <TooltipTrigger label="Edit list name">
+                      <button
+                        type="button"
+                        onClick={() => handleEditList(list.id, list.name)}
+                        className={toneIcon}
+                        aria-label="Edit list name"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : !isMaster && editingListId !== list.id ? (
+            <div className="flex shrink-0 items-center gap-1">
               <TooltipTrigger label="Edit list name">
                 <button
                   type="button"
                   onClick={() => handleEditList(list.id, list.name)}
-                  className={cn(
-                    'icon-hit',
-                    list.name === 'Master Grocery List' ? 'text-primary-foreground' : 'text-foreground'
-                  )}
+                  className={toneIcon}
                   aria-label="Edit list name"
                 >
                   <Pencil className="size-4" />
                 </button>
               </TooltipTrigger>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="grocery-list-container expanded flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <DroppableList
             list={list}
             handleToggleItem={handleToggleItem}
-            handleDeleteItem={handleDeleteItem}
-            handleMoveItem={handleMoveItem}
+            selectedRecipes={selectedRecipes}
+            sortState={grocerySortState}
+            onCycleItemSort={() => setGrocerySortState((prev) => cycleItemColumnSort(prev))}
+            onCycleRecipeSort={() => setGrocerySortState((prev) => cycleRecipeColumnSort(prev))}
+            itemSelectMode={itemSelectMode}
+            itemSelectIds={itemSelectIds}
+            onSelectAllInViewToggle={handleSelectAllInViewToggle}
+            onClearRecipeFilters={clearRecipeFilters}
+            onToggleItemSelectId={toggleItemSelectId}
           />
         </div>
       </div>
@@ -932,20 +1119,18 @@ const GroceryList = () => {
     }
 
     return (
-      <DndProvider backend={HTML5Backend}>
-        <div className={layoutShellClass}>
-          {shell}
-          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pr-4">
-            {shareSuccess ? (
-              <div className="mb-3 shrink-0 flex items-center rounded-xl border border-primary/25 bg-primary/10 p-3 text-sm font-medium text-foreground">
-                <Check className="mr-2 size-4 shrink-0" strokeWidth={1.75} />
-                Grocery list shared successfully!
-              </div>
-            ) : null}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{renderMainListCard()}</div>
-          </div>
+      <div className={layoutShellClass}>
+        {shell}
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pr-4">
+          {shareSuccess ? (
+            <div className="mb-3 shrink-0 flex items-center rounded-xl border border-primary/25 bg-primary/10 p-3 text-sm font-medium text-foreground">
+              <Check className="mr-2 size-4 shrink-0" strokeWidth={1.75} />
+              Grocery list shared successfully!
+            </div>
+          ) : null}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">{renderMainListCard()}</div>
         </div>
-      </DndProvider>
+      </div>
     );
   };
 
@@ -972,44 +1157,150 @@ const GroceryList = () => {
       />
 
       <Dialog
-        open={!!showClearAllConfirm}
+        open={recipeFilterModalOpen}
+        onOpenChange={setRecipeFilterModalOpen}
+      >
+        <DialogContent className="gap-3 sm:max-w-xl" showCloseButton>
+          <DialogHeader className="min-h-11 shrink-0 space-y-0 pr-12">
+            <DialogTitle className="flex min-h-11 items-center text-left text-base leading-tight">
+              Filter by recipe
+            </DialogTitle>
+          </DialogHeader>
+          <div
+            className="flex max-h-[min(65vh,28rem)] flex-wrap gap-2 overflow-y-auto py-0.5"
+            role="group"
+            aria-label="Recipe filters"
+          >
+            <button
+              type="button"
+              onClick={() => clearRecipeFilters()}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
+                selectedRecipes.size === 0
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border/80 bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted/60'
+              )}
+            >
+              All
+            </button>
+            {recipeFilterOptions.map((opt) => {
+              const on = selectedRecipes.has(opt.key);
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => toggleRecipeFilterKey(opt.key)}
+                  className={cn(
+                    'max-w-full truncate rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
+                    on
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border/80 bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted/60'
+                  )}
+                  title={opt.label}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!moveItemsDialog}
         onOpenChange={(open) => {
-          if (!open) setShowClearAllConfirm(null);
+          if (!open) setMoveItemsDialog(null);
         }}
       >
-        <DialogContent className="sm:max-w-md" showCloseButton>
-          <DialogHeader className="pr-10">
-            <DialogTitle>Clear all items</DialogTitle>
-            <DialogDescription>
-              Remove every item from the Master Grocery List? This cannot be undone.
+        <DialogContent className="gap-3 sm:max-w-md" showCloseButton>
+          <DialogHeader className="min-h-11 shrink-0 space-y-0 pr-12">
+            <DialogTitle className="flex min-h-11 items-center text-left text-base leading-tight">
+              {moveItemsDialog
+                ? moveItemsDialog.primaryLabel
+                  ? `Move ${moveItemsDialog.primaryLabel} to`
+                  : `Move ${moveItemsDialog.itemIds.length} items to`
+                : 'Move items'}
+            </DialogTitle>
+          </DialogHeader>
+          <ul className="max-h-[min(60vh,22rem)] space-y-1 overflow-y-auto py-0.5">
+            {moveItemsDialog
+              ? lists
+                  .filter((l) => l.id !== moveItemsDialog.sourceListId)
+                  .map((l) => (
+                    <li key={l.id}>
+                      <button
+                        type="button"
+                        className="flex w-full rounded-xl border border-transparent bg-muted/30 px-3 py-2.5 text-left text-sm font-medium transition-colors hover:border-border hover:bg-muted/50"
+                        onClick={async () => {
+                          const snap = moveItemsDialog;
+                          if (!snap) return;
+                          const { itemIds } = snap;
+                          setMoveItemsDialog(null);
+                          try {
+                            for (const id of itemIds) {
+                              await moveItemToList(id, l.id);
+                            }
+                            await fetchLists();
+                            addNotification(
+                              'success',
+                              itemIds.length === 1
+                                ? `Moved to ${l.name}`
+                                : `${itemIds.length} items moved to ${l.name}`
+                            );
+                          } catch (err) {
+                            console.error(err);
+                            addNotification('error', 'Failed to move items.');
+                            await fetchLists();
+                          }
+                        }}
+                      >
+                        {l.name}
+                      </button>
+                    </li>
+                  ))
+              : null}
+          </ul>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!bulkDeleteDialog}
+        onOpenChange={(open) => {
+          if (!open) setBulkDeleteDialog(null);
+        }}
+      >
+        <DialogContent className="gap-4 sm:max-w-md" showCloseButton={false}>
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-left text-base leading-tight">
+              Delete selected items?
+            </DialogTitle>
+            <DialogDescription className="text-left text-sm leading-relaxed">
+              This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <TooltipTrigger label="Cancel">
-              <button
-                type="button"
-                className="icon-hit text-muted-foreground"
-                onClick={() => setShowClearAllConfirm(null)}
-                aria-label="Cancel"
-              >
-                <X className="size-5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipTrigger label="Clear all items">
-              <button
-                type="button"
-                className="icon-hit icon-hit--destructive text-destructive"
-                onClick={() => showClearAllConfirm && handleClearAllItems(showClearAllConfirm)}
-                disabled={clearingAllItems === showClearAllConfirm}
-                aria-label="Clear all items"
-              >
-                {clearingAllItems === showClearAllConfirm ? (
-                  <Loader2 className="size-5 animate-spin" />
-                ) : (
-                  <Trash2 className="size-5" />
-                )}
-              </button>
-            </TooltipTrigger>
+          <div className="flex flex-row justify-center gap-4 pt-1">
+            <button
+              type="button"
+              onClick={() => setBulkDeleteDialog(null)}
+              disabled={bulkDeletingItems}
+              className="icon-hit text-muted-foreground disabled:pointer-events-none disabled:opacity-40"
+              aria-label="Cancel"
+            >
+              <X className="size-5" strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExecuteBulkDelete()}
+              disabled={bulkDeletingItems}
+              className="icon-hit icon-hit--destructive text-destructive disabled:pointer-events-none disabled:opacity-40"
+              aria-label="Delete selected items"
+            >
+              {bulkDeletingItems ? (
+                <Loader2 className="size-5 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <Trash2 className="size-5" strokeWidth={1.75} />
+              )}
+            </button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1019,108 +1310,129 @@ const GroceryList = () => {
 
 export default GroceryList;
 
-interface DraggableItemProps {
+interface GroceryItemTableRowProps {
   item: any;
   listId: string;
+  itemSelectMode: ItemSelectMode;
+  bulkSelected: boolean;
   handleToggleItem: (listId: string, itemId: string, completed: boolean) => void;
-  handleDeleteItem: (listId: string, itemId: string) => void;
+  onToggleItemSelectId: (itemId: string) => void;
 }
 
-const DraggableItem = ({ item, listId, handleToggleItem, handleDeleteItem }: DraggableItemProps) => {
+const GroceryItemTableRow = ({
+  item,
+  listId,
+  itemSelectMode,
+  bulkSelected,
+  handleToggleItem,
+  onToggleItemSelectId,
+}: GroceryItemTableRowProps) => {
   const isCompleted = item.completed;
+  const selecting = itemSelectMode !== 'none';
 
-  const [{ isDragging }, drag] = useDrag({
-    type: 'GROCERY_ITEM',
-    item: { id: item.id, sourceListId: listId },
-    collect: (monitor) => ({
-      isDragging: !!monitor.isDragging(),
-    }),
-    canDrag: !!item.id,
-  });
+  const recipeDisplay = formatRecipeCell(item.recipeTitle);
+  const recipeTooltip = recipeCellTitle(item.recipeTitle);
 
   return (
-    <li
-      ref={drag}
-      className={`grocery-item flex items-center justify-between py-3 ${isDragging ? 'opacity-50' : ''} ${isCompleted ? 'completed' : ''}`}
-      style={{
-        cursor: item.id ? 'move' : 'default',
-      }}
+    <tr
+      className={cn(
+        'grocery-item transition-colors',
+        isCompleted && 'completed',
+        selecting && bulkSelected && 'bg-primary/5'
+      )}
     >
-      <div className="flex flex-1 items-center">
-        <button
-          type="button"
-          onClick={() => item.id && handleToggleItem(listId, item.id, item.completed)}
-          className={`mr-3 flex size-5 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${
-            isCompleted
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border hover:border-primary/50'
-          }`}
-          disabled={!item.id}
-          aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
-        >
-          {isCompleted && <Check className="size-3" />}
-        </button>
-        <div className="flex-1">
-          <div className="grid grid-cols-2">
-            <span
-              className={cn(
-                'text-sm transition-all duration-300',
-                isCompleted && 'text-muted-foreground line-through'
-              )}
-            >
-              {item.name.charAt(0).toUpperCase() + item.name.slice(1)}
-            </span>
-            <span className="pl-4 text-sm tabular-nums text-muted-foreground">
-              {item.quantity} {item.unit}
-            </span>
-          </div>
-          {item.recipeTitle && (
-            <span className="block text-xs text-muted-foreground">
-              From: {item.recipeTitle.includes(',') ? 'Multiple recipes' : item.recipeTitle}
-              {item.recipeTitle.includes(',') && (
-                <span className="ml-1 text-xs text-muted-foreground/80">(aggregated)</span>
-              )}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="ml-2 shrink-0">
-        {item.id && (
+      <td
+        className={cn(
+          'border-b border-border/80 border-r border-border/80 align-middle',
+          'w-[3.25rem] min-w-[3.25rem] max-w-[3.25rem] px-2 py-2 text-center sm:px-2.5'
+        )}
+      >
+        {selecting ? (
           <button
             type="button"
-            onClick={() => handleDeleteItem(listId, item.id!)}
-            className="icon-hit text-muted-foreground hover:text-destructive"
-            aria-label="Delete item"
+            onClick={() => item.id && onToggleItemSelectId(item.id)}
+            disabled={!item.id}
+            className={cn(
+              'mx-auto flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150',
+              bulkSelected
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-input bg-background hover:border-primary/50'
+            )}
+            aria-label={bulkSelected ? 'Deselect item' : 'Select item'}
+            aria-pressed={bulkSelected}
           >
-            <X className="size-4" />
+            {bulkSelected ? <Check className="size-2.5" strokeWidth={3} /> : null}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => item.id && handleToggleItem(listId, item.id, item.completed)}
+            className={cn(
+              'mx-auto flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150',
+              isCompleted
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border hover:border-primary/50'
+            )}
+            disabled={!item.id}
+            aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+          >
+            {isCompleted && <Check className="size-3" />}
           </button>
         )}
-      </div>
-    </li>
+      </td>
+      <td
+        className="max-w-0 border-b border-border/80 border-r border-border/80 px-3 py-2 align-middle text-sm"
+        title={item.name}
+      >
+        <span
+          className={cn(
+            'block min-w-0 truncate leading-tight transition-colors duration-150',
+            isCompleted && !selecting && 'text-muted-foreground line-through'
+          )}
+        >
+          {item.name.charAt(0).toUpperCase() + item.name.slice(1)}
+        </span>
+      </td>
+      <td className="whitespace-nowrap border-b border-border/80 border-r border-border/80 px-3 py-2 align-middle text-sm tabular-nums text-muted-foreground">
+        {[item.quantity, item.unit].filter(Boolean).join(' ') || '—'}
+      </td>
+      <td
+        className="max-w-0 border-b border-border/80 px-3 py-2 align-middle text-sm text-muted-foreground"
+        title={recipeTooltip}
+      >
+        <span className="block min-w-0 truncate">{recipeDisplay}</span>
+      </td>
+    </tr>
   );
 };
 
 interface DroppableListProps {
   list: GroceryListType;
   handleToggleItem: (listId: string, itemId: string, completed: boolean) => void;
-  handleDeleteItem: (listId: string, itemId: string) => void;
-  handleMoveItem: (itemId: string, sourceListId: string, targetListId: string) => void;
+  selectedRecipes: Set<string>;
+  sortState: GroceryListSortState;
+  onCycleItemSort: () => void;
+  onCycleRecipeSort: () => void;
+  itemSelectMode: ItemSelectMode;
+  itemSelectIds: string[];
+  onSelectAllInViewToggle: (selectableIds: string[]) => void;
+  onClearRecipeFilters: () => void;
+  onToggleItemSelectId: (id: string) => void;
 }
 
-const DroppableList = ({ list, handleToggleItem, handleDeleteItem, handleMoveItem }: DroppableListProps) => {
-  const [{ isOver }, drop] = useDrop({
-    accept: 'GROCERY_ITEM',
-    drop: (item: { id: string; sourceListId: string }) => {
-      if (item.sourceListId !== list.id) {
-        handleMoveItem(item.id, item.sourceListId, list.id);
-      }
-    },
-    collect: (monitor) => ({
-      isOver: !!monitor.isOver(),
-    }),
-  });
-
+const DroppableList = ({
+  list,
+  handleToggleItem,
+  selectedRecipes,
+  sortState,
+  onCycleItemSort,
+  onCycleRecipeSort,
+  itemSelectMode,
+  itemSelectIds,
+  onSelectAllInViewToggle,
+  onClearRecipeFilters,
+  onToggleItemSelectId,
+}: DroppableListProps) => {
   const aggregatedItems = useMemo(() => {
     const itemMap = new Map();
 
@@ -1153,35 +1465,209 @@ const DroppableList = ({ list, handleToggleItem, handleDeleteItem, handleMoveIte
     return Array.from(itemMap.values());
   }, [list.items]);
 
-  const sortedItems = [...aggregatedItems].sort((a, b) => {
-    if (a.completed && !b.completed) return 1;
-    if (!a.completed && b.completed) return -1;
-    return 0;
-  });
+  const recipeFiltered = useMemo(
+    () => aggregatedItems.filter((item) => itemMatchesRecipeFilter(item, selectedRecipes)),
+    [aggregatedItems, selectedRecipes]
+  );
+
+  const displayedItems = useMemo(() => {
+    const incompleteFirst = (a: { completed?: boolean }, b: { completed?: boolean }) => {
+      if (a.completed && !b.completed) return 1;
+      if (!a.completed && b.completed) return -1;
+      return 0;
+    };
+    const byName = (a: { name?: string }, b: { name?: string }) =>
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+    const byRecipe = (a: { recipeTitle?: string | null }, b: { recipeTitle?: string | null }) =>
+      recipeSortKey(a).localeCompare(recipeSortKey(b), undefined, { sensitivity: 'base' });
+
+    const base = [...recipeFiltered];
+    if (sortState === 'default') {
+      return base.sort(incompleteFirst);
+    }
+    if (sortState === 'item_az') {
+      return base.sort((a, b) => {
+        const c = incompleteFirst(a, b);
+        if (c !== 0) return c;
+        return byName(a, b);
+      });
+    }
+    if (sortState === 'item_za') {
+      return base.sort((a, b) => {
+        const c = incompleteFirst(a, b);
+        if (c !== 0) return c;
+        return byName(b, a);
+      });
+    }
+    return base.sort((a, b) => {
+      const c = incompleteFirst(a, b);
+      if (c !== 0) return c;
+      return byRecipe(a, b);
+    });
+  }, [recipeFiltered, sortState]);
+
+  const selecting = itemSelectMode !== 'none';
+
+  const selectableFilteredIds = useMemo(
+    () => displayedItems.map((i) => i.id).filter(Boolean) as string[],
+    [displayedItems]
+  );
+
+  const allFilteredSelected =
+    selectableFilteredIds.length > 0 &&
+    selectableFilteredIds.every((id) => itemSelectIds.includes(id));
 
   return (
-    <div
-      ref={drop}
-      className={cn('flex min-h-0 min-w-0 flex-1 flex-col p-4', isOver && 'bg-primary/5')}
-      style={{ transition: 'background-color 0.2s ease' }}
-    >
-      <div className="min-h-0 flex-1 overflow-y-auto pr-4">
-        <ul className="grocery-list divide-y divide-border">
-          {sortedItems.map((item, index) => (
-            <DraggableItem
-              key={item.id || `aggregated-${index}`}
-              item={item}
-              listId={list.id}
-              handleToggleItem={handleToggleItem}
-              handleDeleteItem={handleDeleteItem}
-            />
-          ))}
-        </ul>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
+      <div className="relative isolate min-h-0 min-w-0 flex-1 overflow-y-auto pr-4">
+        {list.items.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">This list is empty.</p>
+        ) : (
+          <>
+            {displayedItems.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No items match these recipe filters.{' '}
+                <button
+                  type="button"
+                  onClick={onClearRecipeFilters}
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Show all
+                </button>
+              </p>
+            ) : (
+              <div className="grocery-list overflow-hidden rounded-lg border border-border/80 bg-card">
+                <table
+                  className={cn(
+                    GROCERY_TABLE_CLASS,
+                    '[&_tbody_tr:last-child_td]:border-b-0'
+                  )}
+                >
+                  <colgroup>
+                    <col className="w-[3.25rem]" />
+                    <col />
+                    <col className="w-[10rem]" />
+                    <col className="w-[32%]" />
+                  </colgroup>
+                  <thead className="sticky top-0 z-20 bg-card">
+                    <tr>
+                      <th
+                        scope="col"
+                        className="border-b-2 border-border border-r border-border/80 px-2 py-2.5 text-center align-middle text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:px-2.5"
+                      >
+                        {selecting ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectAllInViewToggle(selectableFilteredIds)}
+                            disabled={selectableFilteredIds.length === 0}
+                            className={cn(
+                              'mx-auto flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40',
+                              allFilteredSelected
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-input bg-background hover:border-primary/50'
+                            )}
+                            aria-label={
+                              allFilteredSelected
+                                ? 'Deselect all visible items'
+                                : 'Select all visible items'
+                            }
+                            aria-pressed={allFilteredSelected}
+                          >
+                            {allFilteredSelected ? (
+                              <Check className="size-2.5" strokeWidth={3} />
+                            ) : null}
+                          </button>
+                        ) : (
+                          <span className="inline-block w-5" aria-hidden />
+                        )}
+                      </th>
+                      <th
+                        scope="col"
+                        className={cn(
+                          'border-b-2 border-border border-r border-border/80 px-2 py-2 text-left align-middle text-xs font-semibold uppercase tracking-wide',
+                          sortState === 'item_az' || sortState === 'item_za'
+                            ? 'text-foreground'
+                            : 'text-muted-foreground'
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center justify-between gap-1">
+                          <span className="min-w-0 truncate">Item</span>
+                          <button
+                            type="button"
+                            onClick={onCycleItemSort}
+                            className={cn(
+                              'inline-flex size-8 shrink-0 items-center justify-center rounded-full transition-colors duration-150',
+                              sortState === 'item_az' || sortState === 'item_za'
+                                ? 'bg-primary/15 text-primary ring-1 ring-primary/35'
+                                : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                            )}
+                            aria-pressed={
+                              sortState === 'item_az' || sortState === 'item_za'
+                            }
+                            aria-label={groceryItemSortTooltip(sortState)}
+                          >
+                            <ArrowRightLeft
+                              className={cn(
+                                'size-4 rotate-90',
+                                sortState === 'item_za' && 'scale-y-[-1]'
+                              )}
+                              strokeWidth={2}
+                            />
+                          </button>
+                        </div>
+                      </th>
+                      <th
+                        scope="col"
+                        className="border-b-2 border-border border-r border-border/80 px-3 py-2.5 text-left align-middle text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        Qty
+                      </th>
+                      <th
+                        scope="col"
+                        className={cn(
+                          'border-b-2 border-border px-2 py-2 text-left align-middle text-xs font-semibold uppercase tracking-wide',
+                          sortState === 'recipe_az' ? 'text-foreground' : 'text-muted-foreground'
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center justify-between gap-1">
+                          <span className="min-w-0 truncate">Recipe</span>
+                          <button
+                            type="button"
+                            onClick={onCycleRecipeSort}
+                            className={cn(
+                              'inline-flex size-8 shrink-0 items-center justify-center rounded-full transition-colors duration-150',
+                              sortState === 'recipe_az'
+                                ? 'bg-primary/15 text-primary ring-1 ring-primary/35'
+                                : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                            )}
+                            aria-pressed={sortState === 'recipe_az'}
+                            aria-label={groceryRecipeSortTooltip(sortState)}
+                          >
+                            <ArrowRightLeft className="size-4 rotate-90" strokeWidth={2} />
+                          </button>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedItems.map((item, index) => (
+                      <GroceryItemTableRow
+                        key={item.id || `aggregated-${index}`}
+                        item={item}
+                        listId={list.id}
+                        itemSelectMode={itemSelectMode}
+                        bulkSelected={item.id ? itemSelectIds.includes(item.id) : false}
+                        handleToggleItem={handleToggleItem}
+                        onToggleItemSelectId={onToggleItemSelectId}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
-
-      {list.items.length === 0 && (
-        <p className="py-4 text-center text-sm text-muted-foreground">This list is empty.</p>
-      )}
     </div>
   );
 };

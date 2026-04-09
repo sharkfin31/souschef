@@ -2,32 +2,54 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 
+/** Region wrapper for tooltips (keeps API consistent; extend with context if needed). */
+export function TooltipProvider({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
 export function TooltipTrigger({
   label,
   children,
   className,
+  placement = 'floating',
 }: {
   label: string;
   children: React.ReactNode;
   className?: string;
+  /** `cursor-left`: tip sits to the left of the pointer. `floating`: above/below trigger (centered). */
+  placement?: 'floating' | 'cursor-left';
 }) {
   const triggerRef = React.useRef<HTMLSpanElement>(null);
   const tooltipRef = React.useRef<HTMLDivElement>(null);
+  const pointerRef = React.useRef({ x: 0, y: 0 });
   const resizeObserverRef = React.useRef<ResizeObserver | null>(null);
   const [open, setOpen] = React.useState(false);
   const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null);
 
   const updatePosition = React.useCallback(() => {
-    const trigger = triggerRef.current;
     const tip = tooltipRef.current;
-    if (!trigger || !tip) return;
+    if (!tip) return;
 
-    const tr = trigger.getBoundingClientRect();
     const tipRect = tip.getBoundingClientRect();
     const pad = 8;
     const gap = 8;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+
+    if (placement === 'cursor-left') {
+      const { x, y } = pointerRef.current;
+      let left = x - gap - tipRect.width;
+      let top = y - tipRect.height / 2;
+      left = Math.max(pad, Math.min(left, vw - tipRect.width - pad));
+      top = Math.max(pad, Math.min(top, vh - tipRect.height - pad));
+      setCoords({ top, left });
+      return;
+    }
+
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const tr = trigger.getBoundingClientRect();
 
     const placeAbove = () => tr.top - gap - tipRect.height;
     const placeBelow = () => tr.bottom + gap;
@@ -52,7 +74,7 @@ export function TooltipTrigger({
     left = Math.max(pad, Math.min(left, vw - tipRect.width - pad));
 
     setCoords({ top, left });
-  }, []);
+  }, [placement]);
 
   React.useLayoutEffect(() => {
     if (!open) {
@@ -80,6 +102,13 @@ export function TooltipTrigger({
       window.removeEventListener('resize', updatePosition);
     };
   }, [open, label, updatePosition]);
+
+  const handlePointer = (e: React.MouseEvent) => {
+    pointerRef.current = { x: e.clientX, y: e.clientY };
+    if (open && placement === 'cursor-left') {
+      requestAnimationFrame(() => updatePosition());
+    }
+  };
 
   const tooltip =
     open && typeof document !== 'undefined'
@@ -110,7 +139,11 @@ export function TooltipTrigger({
       <span
         ref={triggerRef}
         className={cn('inline-flex', className)}
-        onMouseEnter={() => setOpen(true)}
+        onMouseEnter={(e) => {
+          pointerRef.current = { x: e.clientX, y: e.clientY };
+          setOpen(true);
+        }}
+        onMouseMove={placement === 'cursor-left' ? handlePointer : undefined}
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}

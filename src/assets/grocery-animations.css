@@ -1,6 +1,6 @@
-/* Grocery list animations */
+/* Grocery list: snappy row highlight when selecting; avoid slow “all” transitions */
 .grocery-item {
-  transition: all 0.5s ease-in-out;
+  transition: background-color 0.12s ease-out, opacity 0.12s ease-out;
   position: relative;
   z-index: 1;
 }
@@ -11,12 +11,12 @@
 
 /* Add a subtle animation when items move */
 @keyframes fadeMove {
-  0% { opacity: 0.8; transform: translateY(-5px); }
+  0% { opacity: 0.92; transform: translateY(-2px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
 .grocery-item.completed {
-  animation: fadeMove 0.5s ease forwards;
+  animation: fadeMove 0.18s ease forwards;
 }
 /* Toggle switch styles */
 .dot {

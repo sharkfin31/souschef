@@ -28,7 +28,7 @@ const RecipeCard = ({ recipe }: RecipeCardProps) => {
             'flex min-h-[40%] shrink-0 flex-col justify-center overflow-hidden rounded-t-2xl border-b border-border/60 bg-gradient-to-br from-primary/10 via-muted/80 to-secondary/15 px-2.5 py-2'
           )}
         >
-          <h3 className="line-clamp-3 text-center text-md font-semibold leading-snug text-card-foreground group-hover:text-primary">
+          <h3 className="line-clamp-3 text-center text-[1.0625rem] font-semibold leading-snug text-card-foreground group-hover:text-primary">
             {recipe.title}
           </h3>
         </div>

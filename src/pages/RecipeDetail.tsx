@@ -605,7 +605,7 @@ const RecipeDetail = () => {
               className="icon-hit text-muted-foreground hover:text-primary disabled:pointer-events-none disabled:opacity-50"
               aria-label="Add or manage recipe video"
             >
-              <ImageIcon className="size-5" />
+              <Video className="size-5" />
             </button>
           </TooltipTrigger>
           <TooltipTrigger label="Delete recipe">
