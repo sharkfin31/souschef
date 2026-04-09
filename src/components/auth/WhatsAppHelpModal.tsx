@@ -1,125 +1,109 @@
-import React from 'react';
-import { ExternalLink, KeyRound, MessageCircle, X } from 'lucide-react';
+import { ExternalLink, KeyRound, MessageCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 interface WhatsAppHelpModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const WhatsAppHelpModal: React.FC<WhatsAppHelpModalProps> = ({ isOpen, onClose }) => {
-  if (!isOpen) return null;
-
+export default function WhatsAppHelpModal({ isOpen, onClose }: WhatsAppHelpModalProps) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-4 border-b">
-          <h3 className="text-lg font-semibold flex items-center">
-            <MessageCircle className="mr-2 size-5 text-green-600" />
-            How to Get Your WhatsApp API Key
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-        
-        <div className="p-6 space-y-6">
-          <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
-            <div className="flex items-center">
-              <KeyRound className="mr-2 size-4 text-blue-500" />
-              <p className="text-sm text-blue-700">
-                <strong>What is this?</strong> The WhatsApp API key allows SousChef to send your grocery lists directly to your WhatsApp.
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        className={cn(
+          'flex max-h-[min(90vh,720px)] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl'
+        )}
+        showCloseButton={false}
+      >
+        <DialogHeader className="shrink-0 space-y-0 px-6 py-4">
+          <DialogTitle className="flex items-center gap-2 text-left text-lg font-semibold">
+            <MessageCircle className="size-5 shrink-0 text-primary" aria-hidden />
+            What is this?
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4">
+            <div className="flex gap-3">
+              <KeyRound className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              <p className="text-sm text-foreground">
+                <span className="font-semibold">The WhatsApp API key lets souschef send grocery lists to your WhatsApp. </span> <br />
               </p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h4 className="font-semibold text-gray-800">Step-by-step instructions:</h4>
-            
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                  1
-                </div>
-                <div>
-                  <p className="text-gray-700">
-                    <strong>Add CallMeBot to WhatsApp:</strong> Send a WhatsApp message to <strong>+34 644 33 66 63</strong> with the text: 
-                    <code className="bg-gray-100 px-2 py-1 rounded text-sm ml-1">I allow callmebot to send me messages</code>
-                  </p>
-                </div>
-              </div>
+          <h4 className="mb-4 font-semibold text-foreground">Step-by-step</h4>
+          <ol className="space-y-4">
+            {[
+              <>
+                <strong>Add CallMeBot on WhatsApp:</strong> Message{' '}
+                <strong className="tabular-nums">+34 644 33 66 63</strong> with:{' '}
+                <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">
+                  I allow callmebot to send me messages
+                </code>
+              </>,
+              <>
+                <strong>Wait for confirmation:</strong> You’ll get a reply with your API key within a few
+                minutes.
+              </>,
+              <>
+                <strong>Copy your API key:</strong> Use the long string from the message.
+              </>,
+              <>
+                <strong>Paste it here:</strong> Enter the key in the registration field to finish setup.
+              </>,
+            ].map((content, i) => (
+              <li key={i} className="flex gap-3">
+                <span
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
+                  aria-hidden
+                >
+                  {i + 1}
+                </span>
+                <p className="pt-0.5 text-sm text-muted-foreground [&_strong]:text-foreground">{content}</p>
+              </li>
+            ))}
+          </ol>
 
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                  2
-                </div>
-                <div>
-                  <p className="text-gray-700">
-                    <strong>Wait for confirmation:</strong> You'll receive a reply with your unique API key within a few minutes.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                  3
-                </div>
-                <div>
-                  <p className="text-gray-700">
-                    <strong>Copy your API key:</strong> The message will contain your API key (a long string of numbers and letters). Copy this key.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                  4
-                </div>
-                <div>
-                  <p className="text-gray-700">
-                    <strong>Paste it here:</strong> Enter the API key in the field below to complete your registration.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-            <p className="text-sm text-yellow-700">
-              <strong>Important:</strong> Keep your API key private and secure. Don't share it with anyone else.
+          <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+            <p className="text-sm text-foreground">
+              <span className="font-semibold">Important:</span> Treat your API key like a password, don’t
+              share it.
             </p>
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h5 className="font-semibold text-gray-800 mb-2">Need more help?</h5>
-            <p className="text-sm text-gray-600 mb-2">
-              Visit the CallMeBot documentation for detailed instructions:
-            </p>
+          <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
             <a
               href="https://www.callmebot.com/blog/free-api-whatsapp-messages/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/90"
             >
-              CallMeBot WhatsApp API Documentation
-              <ExternalLink className="ml-1 size-3" />
+              More information on CallMeBot API
+              <ExternalLink className="size-3.5 shrink-0" aria-hidden />
             </a>
           </div>
         </div>
-        
-        <div className="flex justify-end p-4 border-t bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors"
-          >
-            Got it!
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
-export default WhatsAppHelpModal;
+        <DialogFooter className="mx-0 mb-0 shrink-0 justify-center border-t-0 bg-muted/30 px-6 pt-4 pb-4 sm:justify-center">
+          <Button type="button" onClick={onClose}>
+            Got it
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

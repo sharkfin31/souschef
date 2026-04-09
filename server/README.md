@@ -1,4 +1,4 @@
-# SousChef API Server
+# souschef API Server
 
 A unified recipe extraction and management API that supports multiple URL types including Instagram posts, recipe websites, and general web content.
 

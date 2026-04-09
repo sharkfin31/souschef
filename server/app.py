@@ -1,5 +1,5 @@
 """
-SousChef API - Main FastAPI Application
+souschef API - Main FastAPI Application
 
 A unified recipe extraction and management API that supports multiple URL types
 including Instagram posts and recipe websites.
@@ -26,15 +26,15 @@ logger = setup_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
-    logger.info("Starting SousChef API v1.0.0")
+    logger.info("Starting souschef API v1.0.0")
     logger.info(f"Upload directory: {UPLOAD_DIR}")
     yield
     # Shutdown
-    logger.info("Shutting down SousChef API")
+    logger.info("Shutting down souschef API")
 
 # FastAPI app with enhanced metadata and modern lifespan events
 app = FastAPI(
-    title="SousChef API", 
+    title="souschef API", 
     description="""
     A unified recipe extraction and management API with the following features:
     
@@ -49,7 +49,7 @@ app = FastAPI(
     """,
     version="1.0.0",
     contact={
-        "name": "SousChef API Support",
+        "name": "souschef API Support",
         "url": "https://github.com/sharkfin31/souschef",
     },
     license_info={
@@ -85,7 +85,7 @@ app.include_router(grocery_router)
 async def read_root():
     """Root endpoint with API information"""
     return {
-        "message": "Welcome to SousChef API",
+        "message": "Welcome to souschef API",
         "version": "1.0.0",
         "docs": "/docs",
         "features": [

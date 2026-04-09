@@ -1,6 +1,6 @@
-# SousChef Architecture
+# souschef Architecture
 
-This document outlines the architecture of the SousChef application, which consists of a React frontend and a FastAPI backend.
+This document outlines the architecture of the souschef application, which consists of a React frontend and a FastAPI backend.
 
 ## Backend Architecture
 

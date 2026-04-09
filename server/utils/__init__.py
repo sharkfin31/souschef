@@ -1,5 +1,5 @@
 """
-Utilities module for SousChef API
+Utilities module for souschef API
 
 This module contains utility functions, constants, and helpers.
 """

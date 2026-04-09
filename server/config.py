@@ -1,5 +1,5 @@
 """
-Configuration module for SousChef API
+Configuration module for souschef API
 
 Centralizes all environment variables, API keys, and application settings.
 Provides configuration validation and initialization.

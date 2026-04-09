@@ -86,7 +86,7 @@ Return ONLY the JSON object with no additional text, explanations, or formatting
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://souschef.app",
-                    "X-Title": "SousChef Recipe Extractor"
+                    "X-Title": "souschef Recipe Extractor"
                 },
                 json={
                     "model": "anthropic/claude-3-haiku",

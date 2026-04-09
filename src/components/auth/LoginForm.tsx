@@ -2,19 +2,23 @@ import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const { signIn } = useAuth();
   const { addNotification } = useNotification();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       addNotification('error', 'Please fill in all fields');
       return;
@@ -27,11 +31,10 @@ const LoginForm = () => {
 
       if (success) {
         addNotification('success', 'Successfully logged in! Redirecting...');
-        // Redirect will happen automatically via AuthContext state change
       } else {
         addNotification('error', error || 'Failed to log in');
       }
-    } catch (err) {
+    } catch {
       addNotification('error', 'An unexpected error occurred');
     } finally {
       setIsSubmitting(false);
@@ -39,61 +42,56 @@ const LoginForm = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold text-center mb-6">Sign In</h2>
-      
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label htmlFor="email" className="block text-gray-700 mb-1">
-            Email Address
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
-            placeholder="johndoe@gmail.com"
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <h2 className="text-center text-xl font-semibold tracking-tight text-foreground">Sign in</h2>
+
+      <div>
+        <Label htmlFor="login-email" className="text-muted-foreground">
+          Email
+        </Label>
+        <Input
+          id="login-email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="mt-1.5"
+          placeholder="you@example.com"
+          autoComplete="email"
+          required
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="login-password" className="text-muted-foreground">
+          Password
+        </Label>
+        <div className="relative mt-1.5">
+          <Input
+            id="login-password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="pr-10"
+            placeholder="••••••••"
+            autoComplete="current-password"
             required
           />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="icon-hit absolute right-0 top-1/2 size-9 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
         </div>
-        
-        <div className="mb-6">
-          <label htmlFor="password" className="block text-gray-700 mb-1">
-            Password
-          </label>
-          <div className="relative">
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary pr-10"
-              placeholder="*********"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-            >
-              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-        </div>
-        
-        <button
-          type="submit"
-          className="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary-dark transition-colors duration-200 flex justify-center items-center"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : null}
-          {isSubmitting ? 'Signing In...' : 'Sign In'}
-        </button>
-      </form>
-    </div>
+      </div>
+
+      <Button type="submit" className={cn('w-full')} disabled={isSubmitting}>
+        {isSubmitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+        {isSubmitting ? 'Signing in…' : 'Sign in'}
+      </Button>
+    </form>
   );
 };
 

@@ -1,11 +1,11 @@
-# SousChef
+# souschef
 
-SousChef is an intelligent recipe management web application that transforms how you discover, collect, and organize recipes. Using advanced AI technology, it can automatically extract recipes from various sources including websites, Instagram posts, images, and PDF documents, making it effortless to build your personal digital cookbook.
+souschef is an intelligent recipe management web application that transforms how you discover, collect, and organize recipes. Using advanced AI technology, it can automatically extract recipes from various sources including websites, Instagram posts, images, and PDF documents, making it effortless to build your personal digital cookbook.
 
-## What SousChef Does
+## What souschef Does
 
 ### 🔍 **Smart Recipe Discovery & Import**
-- **Website Integration**: Paste any recipe URL and watch SousChef intelligently extract ingredients, instructions, cooking times, and servings
+- **Website Integration**: Paste any recipe URL and watch souschef intelligently extract ingredients, instructions, cooking times, and servings
 - **Instagram Recipe Parser**: Import recipes directly from Instagram posts and reels with automatic content extraction
 - **Image-to-Recipe**: Upload photos of recipes from cookbooks, magazines, or handwritten notes - OCR technology converts them to structured recipes
 - **PDF Processing**: Extract recipes from PDF cookbooks and documents with intelligent text recognition
@@ -53,4 +53,4 @@ SousChef is an intelligent recipe management web application that transforms how
 - **Recipe Collectors** who want to preserve family recipes and cookbook favorites
 - **Busy Professionals** who need quick access to recipes on any device
 
-SousChef turns the chaos of scattered recipes into an organized, searchable, and shareable digital cookbook that grows with your culinary journey.
+souschef turns the chaos of scattered recipes into an organized, searchable, and shareable digital cookbook that grows with your culinary journey.

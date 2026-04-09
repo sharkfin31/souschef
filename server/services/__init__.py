@@ -1,5 +1,5 @@
 """
-Services module for SousChef API
+Services module for souschef API
 
 This module contains all business logic services for recipe processing,
 authentication, database operations, and external integrations.

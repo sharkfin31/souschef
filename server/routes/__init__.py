@@ -1,5 +1,5 @@
 """
-Routes module for SousChef API
+Routes module for souschef API
 
 This module contains all API route handlers for the application.
 """

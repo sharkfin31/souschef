@@ -1,5 +1,5 @@
 """
-Constants and configuration values for SousChef API
+Constants and configuration values for souschef API
 """
 
 # API Response Messages

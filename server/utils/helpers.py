@@ -1,5 +1,5 @@
 """
-Utility functions for SousChef API
+Utility functions for souschef API
 """
 
 import logging

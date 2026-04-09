@@ -1,5 +1,5 @@
 """
-Models module for SousChef API
+Models module for souschef API
 
 This module contains Pydantic models and data schemas.
 """
