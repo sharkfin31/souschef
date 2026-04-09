@@ -24,6 +24,7 @@ export const getRecipes = async (): Promise<Recipe[]> => {
             description: recipe.description,
             sourceUrl: recipe.source_url,
             imageUrl: recipe.image_url,
+            videoUrl: recipe.video_url ?? null,
             prepTime: recipe.prep_time,
             cookTime: recipe.cook_time,
             servings: recipe.servings,
@@ -82,6 +83,7 @@ const getRecipesFromSupabase = async (): Promise<Recipe[]> => {
         description: recipe.description,
         sourceUrl: recipe.source_url,
         imageUrl: recipe.image_url,
+        videoUrl: recipe.video_url ?? null,
         prepTime: recipe.prep_time,
         cookTime: recipe.cook_time,
         servings: recipe.servings,
@@ -128,6 +130,7 @@ export const getRecipeById = async (id: string): Promise<Recipe> => {
     description: data.description,
     sourceUrl: data.source_url,
     imageUrl: data.image_url,
+    videoUrl: data.video_url ?? null,
     prepTime: data.prep_time,
     cookTime: data.cook_time,
     servings: data.servings,
@@ -208,6 +211,60 @@ export const updateRecipeTags = async (recipeId: string, tags: string[]): Promis
   if (error) {
     console.error('Error updating recipe tags:', error);
     throw new Error('Failed to update recipe tags');
+  }
+};
+
+/**
+ * Replace all instruction steps for a recipe (delete existing, insert new rows).
+ */
+export const replaceRecipeInstructions = async (
+  recipeId: string,
+  steps: string[]
+): Promise<void> => {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { data: recipe, error: fetchError } = await supabase
+    .from('recipes')
+    .select('id')
+    .eq('id', recipeId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (fetchError || !recipe) {
+    throw new Error('Recipe not found or access denied');
+  }
+
+  const { error: deleteError } = await supabase
+    .from('instructions')
+    .delete()
+    .eq('recipe_id', recipeId);
+
+  if (deleteError) {
+    console.error('Error deleting instructions:', deleteError);
+    throw new Error('Failed to update instructions');
+  }
+
+  const trimmed = steps.map((s) => s.trim()).filter(Boolean);
+  if (trimmed.length === 0) {
+    return;
+  }
+
+  const rows = trimmed.map((description, i) => ({
+    id: uuidv4(),
+    recipe_id: recipeId,
+    step_number: i + 1,
+    description,
+  }));
+
+  const { error: insertError } = await supabase.from('instructions').insert(rows);
+
+  if (insertError) {
+    console.error('Error inserting instructions:', insertError);
+    throw new Error('Failed to save instructions');
   }
 };
 

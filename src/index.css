@@ -1,3 +1,6 @@
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -18,9 +21,133 @@
   animation: slide-in 0.3s ease-out;
 }
 
+/* Import recipe dialog open transition (popup is already centered with -translate-x/y-1/2) */
+@keyframes import-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@layer components {
+  .import-dialog-popup[data-open] {
+    animation: import-dialog-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /** Circular hit target + soft circular shadow on hover (not square card shadow) */
+  .icon-hit {
+    @apply inline-flex min-h-10 min-w-10 items-center justify-center rounded-full transition-colors duration-150;
+  }
+  .icon-hit:hover {
+    @apply bg-muted;
+    box-shadow: 0 2px 12px rgb(0 0 0 / 0.08);
+  }
+  .icon-hit:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2;
+  }
+  .icon-hit--destructive:hover {
+    @apply text-destructive;
+    background-color: color-mix(in oklch, var(--destructive) 14%, transparent);
+    box-shadow: 0 2px 12px rgb(239 68 68 / 0.15);
+  }
+
+  /** Pagination (and similar): filled accent circle, overrides generic icon-hit hover */
+  .icon-hit--accent {
+    @apply bg-primary text-primary-foreground;
+  }
+  .icon-hit--accent:hover {
+    @apply bg-primary text-primary-foreground;
+    box-shadow: 0 2px 12px rgb(0 0 0 / 0.1);
+    filter: brightness(0.96);
+  }
+}
+
 @layer base {
   body {
-    @apply antialiased;
+    @apply antialiased bg-background text-foreground;
+  }
+  .theme {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+  }
+  :root {
+    /* Plain neutral surface; teal accent for CTAs and focus */
+    --background: oklch(0.97 0 0);
+    --foreground: oklch(0.2 0.02 260);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.2 0.02 260);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.2 0.02 260);
+    --primary: oklch(0.45 0.1 175);
+    --primary-foreground: oklch(0.99 0 0);
+    --secondary: oklch(0.96 0.01 260);
+    --secondary-foreground: oklch(0.25 0.02 260);
+    --muted: oklch(0.96 0.005 260);
+    --muted-foreground: oklch(0.5 0.02 260);
+    --accent: oklch(0.94 0.03 175);
+    --accent-foreground: oklch(0.28 0.05 175);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border: oklch(0.91 0.005 260);
+    --input: oklch(0.91 0.005 260);
+    --ring: oklch(0.52 0.09 175);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+  }
+  .dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+  }
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
@@ -28,19 +155,19 @@
   .btn {
     @apply px-4 py-2 rounded-md font-medium transition-colors;
   }
-  
+
   .btn-primary {
-    @apply bg-primary text-white hover:bg-primary/90;
+    @apply bg-primary text-primary-foreground hover:opacity-90;
   }
-  
+
   .btn-secondary {
-    @apply bg-secondary text-white hover:bg-secondary/90;
+    @apply bg-secondary text-secondary-foreground hover:opacity-90;
   }
-  
+
   .card {
     @apply bg-white rounded-lg shadow-md overflow-hidden;
   }
-  
+
   .input {
     @apply w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
   }

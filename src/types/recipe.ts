@@ -4,6 +4,8 @@ export interface Recipe {
   description: string | null;
   sourceUrl: string;
   imageUrl: string | null;
+  /** Public video URL (e.g. Supabase Storage or Instagram CDN) */
+  videoUrl: string | null;
   prepTime: number | null;
   cookTime: number | null;
   servings: number | null;

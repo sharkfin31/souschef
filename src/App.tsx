@@ -9,7 +9,7 @@ import Profile from './pages/Profile'
 import { AuthProvider } from './context/AuthContext'
 import { NotificationProvider } from './context/NotificationContext'
 import PrivateRoute from './components/PrivateRoute'
-import NotificationToast from './components/ui/NotificationToast'
+import { Toaster } from '@/components/ui/sonner'
 
 function App() {
   return (
@@ -41,7 +41,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
-        <NotificationToast />
+        <Toaster richColors position="top-right" />
       </AuthProvider>
     </NotificationProvider>
   )

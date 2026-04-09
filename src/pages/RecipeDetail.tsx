@@ -1,13 +1,48 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getRecipeById, updateRecipeTags, updateRecipeTitle, deleteRecipe } from '../services/recipe/recipeService';
+import {
+  getRecipeById,
+  updateRecipeTags,
+  updateRecipeTitle,
+  deleteRecipe,
+  replaceRecipeInstructions,
+} from '../services/recipe/recipeService';
 import { getMasterGroceryList, addIngredientsToList } from '../services/grocery/groceryService';
 import { Recipe } from '../types/recipe';
-import { FaArrowLeft, FaClock, FaUtensils, FaSpinner, FaShoppingBasket, FaImage, FaLink, FaMinus, FaPlus, FaTags, FaTrash, FaFilePdf } from 'react-icons/fa';
-import { FaPen, FaCheck, FaXmark } from "react-icons/fa6"; 
+import { RecipeVideoEmbed } from '@/components/RecipeVideoEmbed';
+import {
+  ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Clock,
+  FileText,
+  Image as ImageIcon,
+  Link as LinkIcon,
+  Loader2,
+  Minus,
+  Pencil,
+  Plus,
+  ShoppingBasket,
+  Tags,
+  Trash2,
+  Utensils,
+  X,
+} from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import '../assets/list-animations.css';
 import '../assets/grocery-animations.css';
+import { TooltipTrigger } from '@/components/ui/tooltip';
 
 const RecipeDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,17 +63,14 @@ const RecipeDetail = () => {
   const [originalServings, setOriginalServings] = useState<number | null>(null);
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
   
-  // Tag editing state
-  const [editingTags, setEditingTags] = useState(false);
   const [newTag, setNewTag] = useState('');
-  const [updatingTags, setUpdatingTags] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  
-  // Title editing state
-  const [editingTitle, setEditingTitle] = useState(false);
+
+  const [isEditingRecipe, setIsEditingRecipe] = useState(false);
+  const [savingRecipe, setSavingRecipe] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [updatingTitle, setUpdatingTitle] = useState(false);
-  
+  const [instructionDrafts, setInstructionDrafts] = useState<string[]>([]);
+
   // Delete state
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -48,55 +80,47 @@ const RecipeDetail = () => {
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   // ===== HELPER FUNCTIONS =====
-  
-  // Helper function to determine recipe source type and display
+
   const getRecipeSourceInfo = () => {
     if (!recipe?.sourceUrl) {
       return {
-        icon: <FaImage className="mr-1 text-gray-500" />,
+        icon: <ImageIcon className="mr-1 size-4 shrink-0 text-muted-foreground" />,
         text: 'Imported from image',
         isLink: false,
-        href: '#'
+        href: '#',
       };
     }
 
     const sourceUrl = recipe.sourceUrl.trim();
-    
-    // Check for Instagram - handle different formats
+
     if (sourceUrl.includes('instagram.com')) {
-      // Extract the actual Instagram URL from formats like:
-      // "Instagram: @username - https://www.instagram.com/reel/xyz/"
-      // "instagram: @username - https://www.instagram.com/reel/xyz/"
       const instagramUrlMatch = sourceUrl.match(/(https?:\/\/(?:www\.)?instagram\.com\/[^\s]+)/);
       const actualUrl = instagramUrlMatch ? instagramUrlMatch[1] : sourceUrl;
-      
-      // Extract username if present
       const usernameMatch = sourceUrl.match(/@([^\s-]+)/);
       const username = usernameMatch ? usernameMatch[1] : null;
-      
+
       return {
+        icon: <LinkIcon className="mr-1 size-4 shrink-0 text-pink-600" />,
         text: username ? `@${username}'s Post` : 'Instagram Post',
         isLink: true,
-        href: actualUrl
+        href: actualUrl,
       };
     }
-    
-    // Check for PDF indicator (if source contains PDF info)
+
     if (sourceUrl.toLowerCase().includes('pdf:') || sourceUrl.toLowerCase().includes('.pdf')) {
       return {
-        icon: <FaFilePdf className="mr-1 text-red-500" />,
+        icon: <FileText className="mr-1 size-4 shrink-0 text-red-500" />,
         text: 'Imported from PDF',
         isLink: false,
-        href: '#'
+        href: '#',
       };
     }
-    
-    // Default web link
+
     return {
-      icon: <FaLink className="mr-1 text-blue-500" />,
+      icon: <LinkIcon className="mr-1 size-4 shrink-0 text-blue-600" />,
       text: 'View Original Recipe',
       isLink: true,
-      href: sourceUrl.startsWith('http') ? sourceUrl : `https://${sourceUrl}`
+      href: sourceUrl.startsWith('http') ? sourceUrl : `https://${sourceUrl}`,
     };
   };
 
@@ -162,16 +186,16 @@ const RecipeDetail = () => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Ctrl+Enter to save tags when editing tags
-      if (event.ctrlKey && event.key === 'Enter' && editingTags && !updatingTags) {
-        handleSaveTags();
+      if (event.ctrlKey && event.key === 'Enter' && isEditingRecipe && !savingRecipe) {
+        handleSaveRecipeEdit();
       }
     };
-    
+
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [editingTags, updatingTags]);
+  }, [isEditingRecipe, savingRecipe]);
 
   // ===== UTILITY FUNCTIONS =====
   
@@ -272,62 +296,72 @@ const RecipeDetail = () => {
     });
   };
   
-  // Handle saving tags to the database
-  const handleSaveTags = async () => {
-    if (!recipe || !id) return;
-    
-    setUpdatingTags(true);
-    try {
-      await updateRecipeTags(id, recipe.tags);
-      setEditingTags(false);
-      setShowSuggestions(false);
-    } catch (err) {
-      setError('Failed to update tags. Please try again.');
-      console.error(err);
-    } finally {
-      setUpdatingTags(false);
-    }
+  const startRecipeEdit = () => {
+    if (!recipe) return;
+    setNewTitle(recipe.title);
+    setInstructionDrafts(recipe.instructions.map((i) => i.description));
+    setNewTag('');
+    setShowSuggestions(false);
+    setIsEditingRecipe(true);
+    setTimeout(() => titleInputRef.current?.focus(), 0);
   };
-  
-  // Handle canceling tag edits
-  const handleCancelTagEdit = async () => {
+
+  const handleCancelRecipeEdit = async () => {
     if (!id) return;
-    
-    // Reload the recipe to get the original tags
     try {
       const data = await getRecipeById(id);
       setRecipe(data);
-      setEditingTags(false);
+      setNewTitle(data.title);
+      setIsEditingRecipe(false);
       setShowSuggestions(false);
+      setNewTag('');
     } catch (err) {
       console.error(err);
     }
   };
-  
-  // Handle saving the recipe title
-  const handleSaveTitle = async () => {
-    if (!recipe || !id || !newTitle.trim()) return;
-    
-    setUpdatingTitle(true);
+
+  const handleSaveRecipeEdit = async () => {
+    if (!recipe || !id) return;
+    if (!newTitle.trim()) {
+      addNotification('warning', 'Please enter a recipe title.');
+      return;
+    }
+    const trimmedInstructions = instructionDrafts.map((s) => s.trim()).filter(Boolean);
+    if (trimmedInstructions.length === 0) {
+      addNotification('warning', 'Add at least one instruction step, or cancel editing.');
+      return;
+    }
+
+    setSavingRecipe(true);
     try {
       await updateRecipeTitle(id, newTitle.trim());
-      setRecipe({
-        ...recipe,
-        title: newTitle.trim()
-      });
-      setEditingTitle(false);
+      await replaceRecipeInstructions(id, trimmedInstructions);
+      await updateRecipeTags(id, recipe.tags);
+      const updated = await getRecipeById(id);
+      setRecipe(updated);
+      setIsEditingRecipe(false);
+      setShowSuggestions(false);
+      setNewTag('');
+      addNotification('success', 'Recipe updated.');
     } catch (err) {
-      setError('Failed to update recipe title. Please try again.');
+      addNotification(
+        'error',
+        err instanceof Error ? err.message : 'Failed to update recipe.'
+      );
       console.error(err);
     } finally {
-      setUpdatingTitle(false);
+      setSavingRecipe(false);
     }
   };
-  
-  // Handle canceling title edits
-  const handleCancelTitleEdit = () => {
-    setNewTitle(recipe?.title || '');
-    setEditingTitle(false);
+
+  const moveInstructionStep = (index: number, direction: 'up' | 'down') => {
+    setInstructionDrafts((prev) => {
+      const next = [...prev];
+      const j = direction === 'up' ? index - 1 : index + 1;
+      if (j < 0 || j >= next.length) return prev;
+      [next[index], next[j]] = [next[j], next[index]];
+      return next;
+    });
   };
 
   // Handle recipe deletion
@@ -388,7 +422,7 @@ const RecipeDetail = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <FaSpinner className="animate-spin text-primary text-2xl" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -406,92 +440,113 @@ const RecipeDetail = () => {
   
   return (
     <div>
-      <div className="mb-6 flex justify-between items-center">
-        <Link to="/" className="flex items-center text-primary hover:underline">
-          <FaArrowLeft className="mr-2" />
-          Back to Recipes
-        </Link>
-        
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="flex items-center px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-md shadow-sm transition-colors"
-          title="Delete recipe"
-        >
-          <FaTrash size={14} />
-        </button>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <TooltipTrigger label="Back to recipes">
+          <Link
+            to="/"
+            className="icon-hit text-primary"
+            aria-label="Back to recipes"
+          >
+            <ArrowLeft className="size-5" />
+          </Link>
+        </TooltipTrigger>
+
+        <div className="flex items-center gap-2">
+          {isEditingRecipe ? (
+            <>
+              <TooltipTrigger label="Save changes">
+                <button
+                  type="button"
+                  onClick={handleSaveRecipeEdit}
+                  disabled={savingRecipe}
+                  className="icon-hit text-primary"
+                  aria-label="Save changes"
+                >
+                  {savingRecipe ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipTrigger label="Cancel editing">
+                <button
+                  type="button"
+                  onClick={handleCancelRecipeEdit}
+                  disabled={savingRecipe}
+                  className="icon-hit text-muted-foreground"
+                  aria-label="Cancel editing"
+                >
+                  <X className="size-5" />
+                </button>
+              </TooltipTrigger>
+            </>
+          ) : (
+            <TooltipTrigger label="Edit recipe">
+              <button
+                type="button"
+                onClick={startRecipeEdit}
+                className="icon-hit text-muted-foreground hover:text-primary"
+                aria-label="Edit recipe"
+              >
+                <Pencil className="size-5" />
+              </button>
+            </TooltipTrigger>
+          )}
+          <TooltipTrigger label="Delete recipe">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="icon-hit icon-hit--destructive text-destructive"
+              aria-label="Delete recipe"
+            >
+              <Trash2 className="size-5" />
+            </button>
+          </TooltipTrigger>
+        </div>
       </div>
       
       <div className="bg-white rounded-lg shadow-md overflow-hidden">        
         <div className="p-6">
           <div className="flex justify-between items-center mb-3">
-            <div className="flex items-center">
-              {editingTitle ? (
-                <div className="flex items-center">
-                  <input
-                    type="text"
-                    ref={titleInputRef}
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && newTitle.trim() && !updatingTitle && handleSaveTitle()}
-                    className="text-3xl font-bold border-b border-gray-300 focus:outline-none focus:border-primary mr-2"
-                    disabled={updatingTitle}
-                    autoFocus
-                  />
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={handleSaveTitle}
-                      className="text-primary hover:text-green-600 p-1"
-                      disabled={updatingTitle || !newTitle.trim()}
-                    >
-                      {updatingTitle ? <FaSpinner className="animate-spin" /> : <FaCheck />}
-                    </button>
-                    <button 
-                      onClick={handleCancelTitleEdit}
-                      className="text-gray-500 hover:text-red-500 p-1"
-                      disabled={updatingTitle}
-                    >
-                      <FaXmark />
-                    </button>
-                  </div>
-                </div>
+            <div className="flex min-w-0 flex-1 items-center">
+              {isEditingRecipe ? (
+                <input
+                  type="text"
+                  ref={titleInputRef}
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="mr-2 w-full min-w-0 border-b border-border bg-transparent text-3xl font-bold focus:border-primary focus:outline-none"
+                  disabled={savingRecipe}
+                  aria-label="Recipe title"
+                />
               ) : (
-                <div className="flex items-center">
-                  <h1 className="text-3xl font-bold mr-2">{recipe.title}</h1>
-                  <button 
-                    onClick={() => {
-                      setEditingTitle(true);
-                      setNewTitle(recipe.title);
-                      setTimeout(() => titleInputRef.current?.focus(), 0);
-                    }}
-                    className="text-gray-400 hover:text-primary mt-1 p-2"
-                    title="Edit recipe title"
-                  >
-                    <FaPen />
-                  </button>
-                </div>
+                <h1 className="text-3xl font-bold">{recipe.title}</h1>
               )}
             </div>
             
-            <div className="flex items-center text-gray-700 bg-white px-3 py-2 rounded-md shadow-sm">
-              <FaUtensils className="mr-2 text-primary" />
-              <div className="flex items-center">
-                <span className="mr-2">Servings:</span>
-                <div className="flex items-center border rounded-md">
-                  <button 
-                    onClick={() => setServings(Math.max(1, servings - 1))}
-                    className="px-2 py-1 text-primary hover:bg-gray-100"
-                    aria-label="Decrease servings"
-                  >
-                    <FaMinus size={12} />
-                  </button>
-                  <span className="px-2 font-bold">{servings}</span>
-                  <button 
-                    onClick={() => setServings(servings + 1)}
-                    className="px-2 py-1 text-primary hover:bg-gray-100"
-                    aria-label="Increase servings"
-                  >
-                    <FaPlus size={12} />
-                  </button>
+            <div className="flex items-center gap-2 text-foreground">
+              <Utensils className="size-5 text-primary" />
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Servings</span>
+                <div className="flex items-center rounded-full border border-border bg-muted/30 px-0.5 py-0.5">
+                  <TooltipTrigger label="Decrease servings">
+                    <button
+                      type="button"
+                      onClick={() => setServings(Math.max(1, servings - 1))}
+                      className="icon-hit text-primary"
+                      aria-label="Decrease servings"
+                    >
+                      <Minus className="size-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <span className="min-w-[1.75rem] px-1 text-center font-bold tabular-nums">{servings}</span>
+                  <TooltipTrigger label="Increase servings">
+                    <button
+                      type="button"
+                      onClick={() => setServings(servings + 1)}
+                      className="icon-hit text-primary"
+                      aria-label="Increase servings"
+                    >
+                      <Plus className="size-4" />
+                    </button>
+                  </TooltipTrigger>
                 </div>
               </div>
             </div>
@@ -500,69 +555,188 @@ const RecipeDetail = () => {
           {recipe.description && (
             <p className="text-gray-600 mb-4 text-sm italic">{recipe.description}</p>
           )}
+
+          {recipe.videoUrl ? (
+            <section className="mb-6" aria-labelledby="recipe-video-heading">
+              <h2
+                id="recipe-video-heading"
+                className="mb-2 text-sm font-semibold tracking-tight text-foreground"
+              >
+                Recipe video
+              </h2>
+              <RecipeVideoEmbed src={recipe.videoUrl} poster={recipe.imageUrl} />
+            </section>
+          ) : null}
           
           {(recipe.prepTime || recipe.cookTime) && (
             <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
               {recipe.prepTime && (
                 <div className="flex items-center text-gray-700 bg-white px-3 py-2 rounded-md shadow-sm">
-                  <FaClock className="mr-2 text-primary" />
+                  <Clock className="mr-2 size-4 text-primary" />
                   <span>Prep: <strong>{recipe.prepTime} min</strong></span>
                 </div>
               )}
               
               {recipe.cookTime && (
                 <div className="flex items-center text-gray-700 bg-white px-3 py-2 rounded-md shadow-sm">
-                  <FaClock className="mr-2 text-primary" />
+                  <Clock className="mr-2 size-4 text-primary" />
                   <span>Cook: <strong>{recipe.cookTime} min</strong></span>
                 </div>
               )}
             </div>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="md:col-span-1">
-              <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-200">Ingredients</h2>
-              <ul className="space-y-3 relative">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-0">
+            <div className="md:col-span-1 md:pr-8">
+              <h2 className="mb-3 border-b border-border pb-2 text-lg font-semibold">Ingredients</h2>
+              <ul className="relative flex flex-col gap-4">
                 {getSortedIngredients().map((ingredient, index) => {
                   const isSelected = selectedIngredients.has(ingredient.id || '');
+                  const qtyParts = [ingredient.displayQuantity, ingredient.unit].filter(Boolean).join(' ');
                   return (
-                    <li 
-                      key={ingredient.id || index} 
-                      className={`flex items-start bg-gray-50 p-2 rounded-md transition-all duration-200 ease-in-out ${isSelected ? 'opacity-70' : ''}`}
+                    <li
+                      key={ingredient.id || index}
+                      className={cn(
+                        'flex items-start gap-2 rounded-md bg-muted/50 px-2 py-1.5 transition-all duration-200 ease-in-out',
+                        isSelected && 'opacity-70'
+                      )}
                     >
-                      <button 
-                        onClick={() => ingredient.id && toggleIngredient(ingredient.id)}
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center mr-3 transition-all duration-200 ease-in-out ${isSelected ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-300'}`}
-                        aria-label={isSelected ? 'Mark as not used' : 'Mark as used'}
+                      <TooltipTrigger
+                        label={isSelected ? 'Mark ingredient as not used' : 'Mark ingredient as used'}
                       >
-                        {isSelected && <FaCheck className="text-xs transition-opacity duration-200" />}
-                      </button>
-                      <span className={`transition-all duration-500 ${isSelected ? 'line-through text-gray-500' : ''}`}>
-                        <span className="font-medium">{ingredient.name.charAt(0).toUpperCase() + ingredient.name.slice(1)}</span>{' '}
-                        {ingredient.displayQuantity && <span className="text-gray-700">{ingredient.displayQuantity}</span>}{' '}
-                        {ingredient.unit && <span className="text-gray-700">{ingredient.unit}</span>}
-                        {ingredient.notes && (
-                          <span className="text-gray-500 italic"> ({ingredient.notes})</span>
-                        )}
-                      </span>
+                        <button
+                          type="button"
+                          onClick={() => ingredient.id && toggleIngredient(ingredient.id)}
+                          className={cn(
+                            'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ease-in-out',
+                            isSelected
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border hover:border-primary/50'
+                          )}
+                          aria-label={isSelected ? 'Mark as not used' : 'Mark as used'}
+                        >
+                          {isSelected && <Check className="size-3 transition-opacity duration-200" />}
+                        </button>
+                      </TooltipTrigger>
+                      <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                        <div
+                          className={cn(
+                            'min-w-0 flex-1 text-left transition-all duration-500',
+                            isSelected && 'text-muted-foreground line-through'
+                          )}
+                        >
+                          <span className="font-medium">
+                            {ingredient.name.charAt(0).toUpperCase() + ingredient.name.slice(1)}
+                          </span>
+                          {ingredient.notes && (
+                            <span className="mt-0.5 block text-xs italic text-muted-foreground">
+                              ({ingredient.notes})
+                            </span>
+                          )}
+                        </div>
+                        {qtyParts ? (
+                          <div
+                            className={cn(
+                              'shrink-0 text-right text-sm tabular-nums text-muted-foreground',
+                              isSelected && 'line-through'
+                            )}
+                          >
+                            {qtyParts}
+                          </div>
+                        ) : null}
+                      </div>
                     </li>
                   );
                 })}
               </ul>
             </div>
             
-            <div className="md:col-span-2">
-              <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-200">Instructions</h2>
-              <ol className="space-y-4">
-                {recipe.instructions.map((instruction, index) => (
-                  <li key={index} className="flex">
-                    <span className="bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 mr-3">
-                      {index + 1}
-                    </span>
-                    <span className="pt-0.5">{instruction.description.charAt(0).toUpperCase() + instruction.description.slice(1)}</span>
-                  </li>
-                ))}
-              </ol>
+            <div className="md:col-span-2 md:border-l md:border-border md:pl-8">
+              <h2 className="mb-3 border-b border-border pb-2 text-lg font-semibold">Instructions</h2>
+              {isEditingRecipe ? (
+                <div className="space-y-4">
+                  {instructionDrafts.map((text, index) => (
+                    <div key={index} className="flex items-start gap-2">
+                      <span className="w-5 shrink-0 pt-2 text-right text-sm font-medium leading-snug tabular-nums text-emerald-600 dark:text-emerald-500">
+                        {index + 1}
+                      </span>
+                      <textarea
+                        value={text}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setInstructionDrafts((prev) => {
+                            const copy = [...prev];
+                            copy[index] = v;
+                            return copy;
+                          });
+                        }}
+                        className="min-h-[4.5rem] flex-1 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        disabled={savingRecipe}
+                      />
+                      <div className="flex shrink-0 flex-col gap-0.5 pt-0.5">
+                        <TooltipTrigger label="Move step up">
+                          <button
+                            type="button"
+                            disabled={index === 0 || savingRecipe}
+                            onClick={() => moveInstructionStep(index, 'up')}
+                            className="icon-hit text-muted-foreground disabled:pointer-events-none disabled:opacity-30"
+                            aria-label="Move step up"
+                          >
+                            <ArrowUp className="size-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipTrigger label="Move step down">
+                          <button
+                            type="button"
+                            disabled={index === instructionDrafts.length - 1 || savingRecipe}
+                            onClick={() => moveInstructionStep(index, 'down')}
+                            className="icon-hit text-muted-foreground disabled:pointer-events-none disabled:opacity-30"
+                            aria-label="Move step down"
+                          >
+                            <ArrowDown className="size-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipTrigger label="Remove step">
+                          <button
+                            type="button"
+                            disabled={savingRecipe || instructionDrafts.length <= 1}
+                            onClick={() =>
+                              setInstructionDrafts((prev) => prev.filter((_, i) => i !== index))
+                            }
+                            className="icon-hit icon-hit--destructive disabled:pointer-events-none disabled:opacity-30"
+                            aria-label="Remove step"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </TooltipTrigger>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setInstructionDrafts((prev) => [...prev, ''])}
+                    disabled={savingRecipe}
+                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"
+                  >
+                    <Plus className="size-4" />
+                    Add step
+                  </button>
+                </div>
+              ) : (
+                <ol className="space-y-4">
+                  {recipe.instructions.map((instruction, index) => (
+                    <li key={instruction.id ?? index} className="flex items-baseline gap-2">
+                      <span className="w-5 shrink-0 text-right text-sm font-medium leading-snug tabular-nums text-emerald-600 dark:text-emerald-500">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 text-sm leading-relaxed">
+                        {instruction.description.charAt(0).toUpperCase() +
+                          instruction.description.slice(1)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
           </div>
           
@@ -571,7 +745,7 @@ const RecipeDetail = () => {
             <div className="mb-2">
               <div className="flex items-center mb-2">
                 <div className="flex items-center flex-grow">
-                  <FaTags className="mr-2 text-primary" />
+                  <Tags className="mr-2 size-5 text-primary" />
                   <h3 className="font-medium mr-2">Tags:</h3>
                 
                   {recipe.tags.length > 0 ? (
@@ -579,97 +753,61 @@ const RecipeDetail = () => {
                       {recipe.tags.map((tag, index) => (
                         <div 
                           key={index} 
-                          className={`bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm flex items-center ${editingTags ? '' : 'cursor-default'}`}
+                          className={`inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-sm font-medium text-foreground ${isEditingRecipe ? '' : 'cursor-default'}`}
                         >
                           {tag}
-                          {editingTags && (
+                          {isEditingRecipe && (
                             <button 
                               onClick={() => handleRemoveTag(tag)}
                               className="ml-2 text-gray-500 hover:text-red-500"
-                              disabled={updatingTags}
+                              disabled={savingRecipe}
                             >
-                              <FaXmark size={12} />
+                              <X className="size-3" />
                             </button>
                           )}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    !editingTags && (
+                    !isEditingRecipe && (
                       <span className="text-gray-500 text-sm italic mt-0.5">No tags added yet!</span>
                     )
                   )}
                 </div>
 
-                <div className="create-list-container inline-flex relative">
-                  <button 
-                    onClick={() => setEditingTags(true)}
-                    className={`btn btn-primary flex items-center create-list-button ${editingTags ? 'hidden' : ''}`}
-                    title="Edit tags"
+                {isEditingRecipe ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleAddTag();
+                    }}
+                    className="inline-flex items-center"
                   >
-                    <FaPen />
-                  </button>
-                  
-                  <form onSubmit={(e) => { e.preventDefault(); handleAddTag(); }} className={`create-list-form ${editingTags ? 'visible' : ''} flex items-center relative`}>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        ref={newTagInputRef}
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (newTag.trim() && !updatingTags) {
-                              handleAddTag();
-                            }
-                          }
-                        }}
-                        onFocus={() => setShowSuggestions(true)}
-                        placeholder="Add a new tag"
-                        className="input mr-2 w-48"
-                        disabled={updatingTags}
-                        autoFocus={editingTags}
-                      />
-                    </div>
-                    
-                    <div className="flex space-x-1">
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          if (updatingTags) return;
-                          // If there's text in the input, add it as a tag first
-                          if (newTag.trim()) {
+                    <input
+                      type="text"
+                      ref={newTagInputRef}
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (newTag.trim() && !savingRecipe) {
                             handleAddTag();
                           }
-                          // Then save all tags
-                          handleSaveTags();
-                        }}
-                        className="text-primary hover:text-green-600 p-2"
-                        disabled={updatingTags}
-                        title="Save tags (Ctrl+Enter)"
-                      >
-                        {updatingTags ? <FaSpinner className="animate-spin" /> : <FaCheck />}
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          setNewTag('');
-                          handleCancelTagEdit();
-                        }}
-                        className="text-gray-500 hover:text-red-500 p-2"
-                        disabled={updatingTags}
-                      >
-                        <FaXmark />
-                      </button>
-                    </div>
+                        }
+                      }}
+                      onFocus={() => setShowSuggestions(true)}
+                      placeholder="Add a tag"
+                      className="input mr-2 w-48"
+                      disabled={savingRecipe}
+                    />
                   </form>
-                </div>
+                ) : null}
               </div>
             </div>
             
             {/* Tag suggestions as a row */}
-            {showSuggestions && editingTags && (
+            {showSuggestions && isEditingRecipe && (
               <div className="mt-3 p-2 bg-white">
                 <div className="flex flex-wrap gap-1 items-center">
                   <p className="text-xs text-gray-500 mr-2">Suggestions:</p>
@@ -679,7 +817,7 @@ const RecipeDetail = () => {
                     .map((tag, index) => (
                       <span
                         key={index}
-                        className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-xs"
+                        className="inline-flex items-center rounded-full border border-dashed border-border/50 bg-muted/30 px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
                       >
                         {tag}
                       </span>
@@ -689,20 +827,19 @@ const RecipeDetail = () => {
             )}
           </div>
           
-          <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-            <p className="text-sm text-gray-500 flex items-center">
-              Source:{' '}
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-center text-sm leading-relaxed text-foreground">
               {(() => {
                 const sourceInfo = getRecipeSourceInfo();
                 return (
-                  <span className="ml-2 flex items-center">
+                  <span className="flex min-w-0 flex-wrap items-center gap-1">
                     {sourceInfo.icon}
                     {sourceInfo.isLink ? (
                       <a
                         href={sourceInfo.href}
-                        target={sourceInfo.href.startsWith('http') ? "_blank" : "_self"}
-                        rel={sourceInfo.href.startsWith('http') ? "noopener noreferrer" : undefined}
-                        className="text-primary hover:underline"
+                        target={sourceInfo.href.startsWith('http') ? '_blank' : '_self'}
+                        rel={sourceInfo.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                        className="text-sm font-medium text-primary hover:underline"
                         onClick={(e) => {
                           if (sourceInfo.href === '#') {
                             e.preventDefault();
@@ -712,85 +849,87 @@ const RecipeDetail = () => {
                         {sourceInfo.text}
                       </a>
                     ) : (
-                      sourceInfo.text
+                      <span className="text-sm text-foreground">{sourceInfo.text}</span>
                     )}
                   </span>
                 );
               })()}
-            </p>
-            
-            <button
-              onClick={handleCreateGroceryList}
-              disabled={creatingList || listCreated}
-              className={`btn ${
-                listCreated ? 'bg-green-500 hover:bg-green-500' : 'btn-secondary'
-              } flex items-center justify-center shadow-md transition-all transform hover:scale-105`}
-            >
-              {creatingList ? (
-                <span className="flex items-center">
-                  <FaSpinner className="animate-spin mr-2" />
-                  Creating List...
-                </span>
-              ) : listCreated ? (
-                <span className="flex items-center">
-                  <FaCheck className="mr-2" />
-                  Added to Grocery List
-                </span>
-              ) : (
-                <span className="flex items-center">
-                  <FaShoppingBasket className="mr-2" />
-                  Add to Grocery List
-                </span>
-              )}
-            </button>
+            </div>
+            <div className="flex justify-end sm:shrink-0">
+              <TooltipTrigger
+                label={
+                  creatingList
+                    ? 'Adding to grocery list…'
+                    : listCreated
+                      ? 'Added to grocery list'
+                      : 'Add to grocery list'
+                }
+              >
+                <button
+                  type="button"
+                  onClick={handleCreateGroceryList}
+                  disabled={creatingList || listCreated}
+                  className={cn(
+                    'icon-hit',
+                    listCreated && 'text-green-600 dark:text-green-500',
+                    !listCreated && 'text-primary'
+                  )}
+                  aria-label={
+                    creatingList
+                      ? 'Adding to grocery list'
+                      : listCreated
+                        ? 'Added to grocery list'
+                        : 'Add to grocery list'
+                  }
+                >
+                  {creatingList ? (
+                    <Loader2 className="size-5 animate-spin" aria-hidden />
+                  ) : listCreated ? (
+                    <Check className="size-5" aria-hidden />
+                  ) : (
+                    <ShoppingBasket className="size-5" aria-hidden />
+                  )}
+                </button>
+              </TooltipTrigger>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center mb-4">
-                <FaTrash className="text-red-500 mr-3" size={24} />
-                <h3 className="text-lg font-semibold">Delete Recipe</h3>
-              </div>
-              
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete "<strong>{recipe?.title}</strong>"? 
-              </p>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  disabled={deleting}
-                  className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteRecipe}
-                  disabled={deleting}
-                  className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors disabled:opacity-50 flex items-center"
-                >
-                  {deleting ? (
-                    <>
-                      <FaSpinner className="animate-spin mr-2" size={14} />
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <FaTrash className="mr-2" size={14} />
-                      Delete
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={showDeleteConfirm} onOpenChange={(open) => !open && !deleting && setShowDeleteConfirm(false)}>
+        <DialogContent className="sm:max-w-md" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Delete recipe</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{recipe?.title}&quot;? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" size="sm" onClick={handleDeleteRecipe} disabled={deleting}>
+              {deleting ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

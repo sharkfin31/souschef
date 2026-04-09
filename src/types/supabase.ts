@@ -17,6 +17,7 @@ export interface Database {
           description: string | null
           source_url: string
           image_url: string | null
+          video_url: string | null
           prep_time: number | null
           cook_time: number | null
           servings: number | null
@@ -30,6 +31,7 @@ export interface Database {
           description?: string | null
           source_url: string
           image_url?: string | null
+          video_url?: string | null
           prep_time?: number | null
           cook_time?: number | null
           servings?: number | null
@@ -43,6 +45,7 @@ export interface Database {
           description?: string | null
           source_url?: string
           image_url?: string | null
+          video_url?: string | null
           prep_time?: number | null
           cook_time?: number | null
           servings?: number | null

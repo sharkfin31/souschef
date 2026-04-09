@@ -23,6 +23,16 @@ class Config:
     SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
     SUPABASE_JWT_SECRET: str = os.getenv('SUPABASE_JWT_SECRET', '')
     
+    # Cloudflare R2 (recipe videos). When all are set, uploads use R2 instead of Supabase Storage.
+    R2_ACCOUNT_ID: str = os.getenv('R2_ACCOUNT_ID', '')
+    R2_ACCESS_KEY_ID: str = os.getenv('R2_ACCESS_KEY_ID', '')
+    R2_SECRET_ACCESS_KEY: str = os.getenv('R2_SECRET_ACCESS_KEY', '')
+    R2_BUCKET_NAME: str = os.getenv('R2_BUCKET_NAME', '')
+    # Public URL prefix (no trailing slash), e.g. https://pub-xxxx.r2.dev or https://videos.example.com
+    R2_PUBLIC_BASE_URL: str = os.getenv('R2_PUBLIC_BASE_URL', '').rstrip('/')
+    # Hard cap for total raw object bytes in the recipe bucket (default 9.5 GiB free-tier headroom)
+    R2_MAX_TOTAL_GB: float = float(os.getenv('R2_MAX_TOTAL_GB', '9.5'))
+    
     # Messaging Services
     WHATSAPP_API_KEY: str = os.getenv('WHATSAPP_API_KEY', '')
     WHATSAPP_PHONE_NUMBER: str = os.getenv('WHATSAPP_PHONE_NUMBER', '')

@@ -1,6 +1,5 @@
 import React from 'react';
-import { FaExternalLinkAlt, FaWhatsapp, FaKey } from 'react-icons/fa';
-import { FaXmark } from 'react-icons/fa6';
+import { ExternalLink, KeyRound, MessageCircle, X } from 'lucide-react';
 
 interface WhatsAppHelpModalProps {
   isOpen: boolean;
@@ -15,21 +14,21 @@ const WhatsAppHelpModal: React.FC<WhatsAppHelpModalProps> = ({ isOpen, onClose }
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-4 border-b">
           <h3 className="text-lg font-semibold flex items-center">
-            <FaWhatsapp className="text-green-500 mr-2" />
+            <MessageCircle className="mr-2 size-5 text-green-600" />
             How to Get Your WhatsApp API Key
           </h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <FaXmark size={20} />
+            <X className="size-5" />
           </button>
         </div>
         
         <div className="p-6 space-y-6">
           <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
             <div className="flex items-center">
-              <FaKey className="text-blue-400 mr-2" />
+              <KeyRound className="mr-2 size-4 text-blue-500" />
               <p className="text-sm text-blue-700">
                 <strong>What is this?</strong> The WhatsApp API key allows SousChef to send your grocery lists directly to your WhatsApp.
               </p>
@@ -105,7 +104,7 @@ const WhatsAppHelpModal: React.FC<WhatsAppHelpModalProps> = ({ isOpen, onClose }
               className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm"
             >
               CallMeBot WhatsApp API Documentation
-              <FaExternalLinkAlt className="ml-1" size={12} />
+              <ExternalLink className="ml-1 size-3" />
             </a>
           </div>
         </div>

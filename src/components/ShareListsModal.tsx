@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
-import { FaXmark } from 'react-icons/fa6';
+import { AlertCircle, Check, ListChecks, Loader2, Share2, Smartphone } from 'lucide-react';
 import { GroceryList as GroceryListType } from '../types/recipe';
 import { supabase } from '../lib/supabase';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -17,25 +25,28 @@ const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) =
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch user's phone number when modal opens
   useEffect(() => {
     if (isOpen) {
       fetchUserPhoneNumber();
+      setSelectedLists([]);
+      setError(null);
     }
   }, [isOpen]);
 
   const fetchUserPhoneNumber = async () => {
     setLoadingPhone(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
-        const { data, error } = await supabase
+        const { data, error: profileError } = await supabase
           .from('profiles')
           .select('phone_number')
           .eq('id', user.id)
           .single();
-        
-        if (data && !error) {
+
+        if (data && !profileError) {
           setUserPhoneNumber(data.phone_number || '');
         }
       }
@@ -47,8 +58,6 @@ const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) =
     }
   };
 
-  if (!isOpen) return null;
-
   const handleClose = () => {
     setSelectedLists([]);
     setUserPhoneNumber('');
@@ -56,11 +65,13 @@ const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) =
     onClose();
   };
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open) handleClose();
+  };
+
   const handleSelectList = (listId: string) => {
-    setSelectedLists(prev => 
-      prev.includes(listId)
-        ? prev.filter(id => id !== listId)
-        : [...prev, listId]
+    setSelectedLists((prev) =>
+      prev.includes(listId) ? prev.filter((id) => id !== listId) : [...prev, listId]
     );
   };
 
@@ -70,9 +81,10 @@ const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) =
       return;
     }
 
-    // Check if user has a phone number
     if (!userPhoneNumber) {
-      setError('No phone number found in your profile. Please update your profile with a phone number first.');
+      setError(
+        'No phone number found in your profile. Please update your profile with a phone number first.'
+      );
       return;
     }
 
@@ -81,7 +93,7 @@ const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) =
 
     try {
       await onShare(selectedLists, userPhoneNumber);
-      handleClose(); // Use handleClose instead of onClose to reset form
+      handleClose();
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -93,79 +105,123 @@ const ShareListsModal = ({ isOpen, onClose, lists, onShare }: ShareModalProps) =
     }
   };
 
+  const canShare =
+    selectedLists.length > 0 && !!userPhoneNumber && !loadingPhone && !sharing;
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Select Lists to Share</h2>
-          <button onClick={handleClose} className="text-gray-500 hover:text-red-500">
-            <FaXmark size={18} />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="gap-0 overflow-hidden pb-2 pt-4 sm:max-w-md" showCloseButton>
+        <DialogHeader className="space-y-1 pb-2 pr-10 text-left">
+          <DialogTitle className="text-lg">Share grocery lists</DialogTitle>
+          <DialogDescription className="text-xs">
+            Select lists, then share to your phone.
+          </DialogDescription>
+        </DialogHeader>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
-            {error}
-          </div>
-        )}
+        <div className="space-y-3 px-1 pb-0 pt-0">
+          {error ? (
+            <div
+              role="alert"
+              className="flex gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>{error}</span>
+            </div>
+          ) : null}
 
-        {loadingPhone && (
-          <div className="mb-4 p-3 bg-gray-50 text-gray-600 rounded-md">
-            📱 Loading your phone number...
-          </div>
-        )}
-
-        {!loadingPhone && userPhoneNumber && (
-          <div className="mb-4 p-3 bg-blue-50 text-blue-700 rounded-md">
-            📱 Will share to: {userPhoneNumber}
-          </div>
-        )}
-
-        {!loadingPhone && !userPhoneNumber && (
-          <div className="mb-4 p-3 bg-yellow-50 text-yellow-700 rounded-md">
-            ⚠️ No phone number found in your profile. Please add one in your profile settings.
-          </div>
-        )}
-
-        <div className="mb-4">
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {lists.map(list => (
-              <div 
-                key={list.id} 
-                className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer"
-                onClick={() => handleSelectList(list.id)}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedLists.includes(list.id)}
-                  onChange={() => {}} // Handled by div click
-                  className="mr-2"
-                />
-                <span className="flex-1">{list.name}</span>
-                <span className="text-xs text-gray-500 ml-2">({list.items.length} items)</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 text-gray-600 mr-2"
-            disabled={sharing}
+          <div
+            className={cn(
+              'flex items-center justify-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-4',
+              loadingPhone && 'border-muted bg-muted/50',
+              !loadingPhone && !userPhoneNumber && 'border-amber-200/80 bg-amber-50/80 text-amber-950'
+            )}
           >
-            Cancel
-          </button>
-          <button
-            onClick={handleShare}
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark disabled:bg-gray-400"
-            disabled={sharing || selectedLists.length === 0 || !userPhoneNumber || loadingPhone}
-          >
-            {sharing ? 'Sharing...' : 'Share'}
-          </button>
+            {loadingPhone ? (
+              <Loader2 className="size-5 shrink-0 animate-spin text-muted-foreground" />
+            ) : (
+              <Smartphone className="size-5 shrink-0 text-primary" aria-hidden />
+            )}
+            {loadingPhone ? (
+              <span className="text-sm text-muted-foreground">Loading…</span>
+            ) : userPhoneNumber ? (
+              <p className="font-mono text-base font-medium tracking-wide">{userPhoneNumber}</p>
+            ) : (
+              <p className="text-center text-sm leading-snug">Add a phone number in your profile first.</p>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <ListChecks className="size-3.5" aria-hidden />
+              Lists
+            </div>
+            {lists.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
+                No lists to share.
+              </p>
+            ) : (
+              <ul className="max-h-48 space-y-1.5 overflow-y-auto pr-0.5">
+                {lists.map((list) => {
+                  const selected = selectedLists.includes(list.id);
+                  return (
+                    <li key={list.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectList(list.id)}
+                        className={cn(
+                          'flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm transition-colors',
+                          selected
+                            ? 'border-primary/50 bg-primary/5'
+                            : 'border-border bg-background hover:bg-muted/60'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'flex size-4 shrink-0 items-center justify-center rounded border',
+                            selected
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-input bg-background'
+                          )}
+                          aria-hidden
+                        >
+                          {selected ? <Check className="size-2.5" strokeWidth={3} /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium leading-tight">{list.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {list.items.length} item{list.items.length === 1 ? '' : 's'}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="flex justify-center border-t border-border/60 pt-3 pb-0">
+            <button
+              type="button"
+              className={cn(
+                'icon-hit min-h-11 min-w-11 text-primary',
+                (!canShare || lists.length === 0) && 'pointer-events-none opacity-40'
+              )}
+              onClick={handleShare}
+              disabled={!canShare || lists.length === 0}
+              aria-label="Share selected lists"
+              title="Share"
+            >
+              {sharing ? (
+                <Loader2 className="size-5 animate-spin" aria-hidden />
+              ) : (
+                <Share2 className="size-5" aria-hidden />
+              )}
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 

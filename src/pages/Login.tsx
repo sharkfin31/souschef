@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
-import { FaUserPlus, FaSignInAlt } from 'react-icons/fa';
+import { LogIn, UserPlus } from 'lucide-react';
 
 const Login = () => {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
@@ -34,7 +34,7 @@ const Login = () => {
                 : 'text-gray-600 hover:text-gray-800'
             }`}
           >
-            <FaSignInAlt /> Sign In
+            <LogIn className="size-4" /> Sign In
           </button>
           <button
             onClick={() => setActiveTab('register')}
@@ -44,7 +44,7 @@ const Login = () => {
                 : 'text-gray-600 hover:text-gray-800'
             }`}
           >
-            <FaUserPlus /> Register
+            <UserPlus className="size-4" /> Register
           </button>
         </div>
       </div>

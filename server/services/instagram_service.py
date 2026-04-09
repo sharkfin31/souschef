@@ -14,6 +14,10 @@ from typing import Dict, Any, Optional, List
 from apify_client import ApifyClientAsync
 from services.ai_service import process_with_ai
 from services.db_service import save_recipe_to_db
+from services.media_storage_service import (
+    download_and_store_recipe_video,
+    set_recipe_video_url,
+)
 from utils.helpers import setup_logger
 
 # Setup logging
@@ -39,6 +43,15 @@ def get_apify_client() -> ApifyClientAsync:
         logger.info("Created Apify async client")
     
     return _apify_client
+
+def extract_apify_video_url(post_data: Dict[str, Any]) -> Optional[str]:
+    """Best-effort video URL from Apify Instagram post payload."""
+    for key in ("videoUrlHD", "videoUrl", "video_url"):
+        v = post_data.get(key)
+        if isinstance(v, str) and v.startswith("http"):
+            return v
+    return None
+
 
 def extract_instagram_shortcode(url: str) -> Optional[str]:
     """Extract shortcode from Instagram URL"""
@@ -210,6 +223,21 @@ async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> 
                 "error": "Failed to save recipe",
                 "message": "The recipe was extracted but couldn't be saved to the database."
             }
+
+        apify_video_url = extract_apify_video_url(post_data)
+        video_url_out: Optional[str] = None
+        if apify_video_url and user_id:
+            stored = await download_and_store_recipe_video(
+                apify_video_url,
+                recipe_id,
+                user_id,
+                recipe_title=recipe_data.get("title"),
+            )
+            video_url_out = stored or apify_video_url
+            await set_recipe_video_url(recipe_id, video_url_out)
+        elif apify_video_url:
+            video_url_out = apify_video_url
+            await set_recipe_video_url(recipe_id, video_url_out)
         
         logger.info(f"Successfully extracted and saved recipe: {recipe_data.get('title', 'Untitled')}")
         
@@ -231,6 +259,7 @@ async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> 
             "instructions": recipe_data.get("instructions", []),
             "tags": recipe_data.get("tags", []),
             "image_url": image_url,
+            "video_url": video_url_out,
             "source": "instagram",
             "extracted_via": "apify",
             "instagram_data": {

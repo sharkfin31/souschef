@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FaSpinner } from 'react-icons/fa'; // Loading spinner
+import { Loader2 } from 'lucide-react';
 
 interface PrivateRouteProps {
   children: ReactNode;
@@ -14,7 +14,7 @@ const PrivateRoute = ({ children }: PrivateRouteProps) => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <FaSpinner className="animate-spin text-primary text-2xl" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }

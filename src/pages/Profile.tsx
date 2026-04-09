@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { FaSpinner, FaCheck, FaPen, FaTimes } from 'react-icons/fa';
-import { FiUser, FiLogOut } from 'react-icons/fi';
+import { Check, KeyRound, Loader2, LogOut, Pencil, User, X } from 'lucide-react';
 import { format } from 'date-fns';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface ProfileData {
   id: string;
@@ -20,27 +30,25 @@ const Profile = () => {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [isEditingPhone, setIsEditingPhone] = useState(false);
-  
-  // Store original values when editing starts
-  const [originalFullName, setOriginalFullName] = useState('');
-  const [originalPhoneNumber, setOriginalPhoneNumber] = useState('');
-  
-  // Password update states
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
 
-  // Auto-dismiss messages after 5 seconds
+  const [newPassword, setNewPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const closePasswordModal = () => {
+    setPasswordModalOpen(false);
+    setNewPassword('');
+  };
+
   useEffect(() => {
     if (message) {
       const timer = setTimeout(() => {
         setMessage(null);
       }, 5000);
-      
+
       return () => clearTimeout(timer);
     }
   }, [message]);
@@ -53,11 +61,7 @@ const Profile = () => {
       }
 
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
         if (error) {
           console.error('Error fetching profile:', error);
@@ -78,72 +82,37 @@ const Profile = () => {
     fetchProfile();
   }, [user]);
 
-  const handleStartEditName = () => {
-    setOriginalFullName(fullName);
-    setIsEditingName(true);
+  const startEditProfile = () => {
+    setIsEditingProfile(true);
   };
 
-  const handleCancelEditName = () => {
-    setFullName(originalFullName);
-    setIsEditingName(false);
+  const cancelEditProfile = () => {
+    if (profile) {
+      setFullName(profile.full_name || '');
+      setPhoneNumber(profile.phone_number || '');
+    }
+    setIsEditingProfile(false);
   };
 
-  const handleStartEditPhone = () => {
-    setOriginalPhoneNumber(phoneNumber);
-    setIsEditingPhone(true);
-  };
-
-  const handleCancelEditPhone = () => {
-    setPhoneNumber(originalPhoneNumber);
-    setIsEditingPhone(false);
-  };
-
-  const handleUpdateName = async () => {
+  const saveProfile = async () => {
     if (!user?.id) return;
-    
+
+    if (!phoneNumber.match(/^\+?[1-9]\d{1,14}$/)) {
+      setMessage({
+        type: 'error',
+        text: 'Please enter a valid phone number in international format (e.g., +12345678901)',
+      });
+      return;
+    }
+
     setMessage(null);
     setSaving(true);
-    
+
     try {
       const { error } = await supabase
         .from('profiles')
         .update({
           full_name: fullName,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) {
-        throw error;
-      }
-
-      setProfile(prev => prev ? { ...prev, full_name: fullName } : null);
-      setIsEditingName(false);
-      setMessage({ type: 'success', text: 'Name updated successfully' });
-    } catch (error) {
-      console.error('Error updating name:', error);
-      setMessage({ type: 'error', text: 'Failed to update name' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleUpdatePhone = async () => {
-    if (!user?.id) return;
-    
-    // Validate phone number
-    if (!phoneNumber.match(/^\+?[1-9]\d{1,14}$/)) {
-      setMessage({ type: 'error', text: 'Please enter a valid phone number in international format (e.g., +12345678901)' });
-      return;
-    }
-    
-    setMessage(null);
-    setSaving(true);
-    
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
           phone_number: phoneNumber,
           updated_at: new Date().toISOString(),
         })
@@ -153,47 +122,43 @@ const Profile = () => {
         throw error;
       }
 
-      setProfile(prev => prev ? { ...prev, phone_number: phoneNumber } : null);
-      setIsEditingPhone(false);
-      setMessage({ type: 'success', text: 'Phone number updated successfully' });
+      setProfile((prev) =>
+        prev ? { ...prev, full_name: fullName, phone_number: phoneNumber } : null
+      );
+      setIsEditingProfile(false);
+      setMessage({ type: 'success', text: 'Profile updated successfully' });
     } catch (error) {
-      console.error('Error updating phone:', error);
-      setMessage({ type: 'error', text: 'Failed to update phone number' });
+      console.error('Error updating profile:', error);
+      setMessage({ type: 'error', text: 'Failed to update profile' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleUpdatePassword = async () => {
-    if (!newPassword || !confirmPassword) {
-      setMessage({ type: 'error', text: 'Please fill in all password fields' });
+    if (!newPassword) {
+      setMessage({ type: 'error', text: 'Please enter a new password' });
       return;
     }
-    
-    if (newPassword !== confirmPassword) {
-      setMessage({ type: 'error', text: 'Passwords do not match' });
-      return;
-    }
-    
+
     if (newPassword.length < 6) {
       setMessage({ type: 'error', text: 'Password must be at least 6 characters' });
       return;
     }
-    
+
     setMessage(null);
     setIsChangingPassword(true);
-    
+
     try {
       const { error } = await supabase.auth.updateUser({
-        password: newPassword
+        password: newPassword,
       });
-      
+
       if (error) {
         throw error;
       }
 
-      setNewPassword('');
-      setConfirmPassword('');
+      closePasswordModal();
       setMessage({ type: 'success', text: 'Password updated successfully' });
     } catch (error) {
       console.error('Error updating password:', error);
@@ -214,229 +179,244 @@ const Profile = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <FaSpinner className="animate-spin text-primary text-2xl" />
-        <span className="ml-2 text-gray-600">Loading profile...</span>
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
-        <p className="text-center">Please sign in to view your profile.</p>
+      <div className="rounded-xl border border-dashed border-muted-foreground/25 bg-muted/30 p-10 text-center">
+        <p className="text-muted-foreground">Please sign in to view your profile.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
-      {/* Header Section */}
-      <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-white">
-            {profile?.avatar_url ? (
-              <img
-                src={profile.avatar_url}
-                alt={profile.full_name || 'User'}
-                className="w-16 h-16 rounded-full object-cover"
+    <div className="mx-auto max-w-3xl">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-md">
+        <div className="flex flex-col gap-4 border-b border-border bg-muted/30 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-primary-foreground">
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.full_name || 'User'}
+                  className="h-16 w-16 object-cover"
+                />
+              ) : (
+                <User className="size-8" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                {profile?.full_name || user?.email}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Member since{' '}
+                {user?.created_at ? format(new Date(user.created_at), 'MMMM yyyy') : 'recently'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            {isEditingProfile ? (
+              <>
+                <TooltipTrigger label="Save changes">
+                  <button
+                    type="button"
+                    onClick={saveProfile}
+                    disabled={saving}
+                    className="icon-hit text-primary"
+                    aria-label="Save changes"
+                  >
+                    {saving ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipTrigger label="Cancel">
+                  <button
+                    type="button"
+                    onClick={cancelEditProfile}
+                    disabled={saving}
+                    className="icon-hit text-muted-foreground"
+                    aria-label="Cancel editing"
+                  >
+                    <X className="size-5" />
+                  </button>
+                </TooltipTrigger>
+              </>
+            ) : (
+              <TooltipTrigger label="Edit profile">
+                <button
+                  type="button"
+                  onClick={startEditProfile}
+                  className="icon-hit text-muted-foreground hover:text-primary"
+                  aria-label="Edit profile"
+                >
+                  <Pencil className="size-5" />
+                </button>
+              </TooltipTrigger>
+            )}
+            <TooltipTrigger label="Change password">
+              <button
+                type="button"
+                onClick={() => setPasswordModalOpen(true)}
+                className="icon-hit text-muted-foreground hover:text-primary"
+                aria-label="Change password"
+              >
+                <KeyRound className="size-5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipTrigger label="Sign out">
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="icon-hit text-muted-foreground"
+                aria-label="Sign out"
+              >
+                <LogOut className="size-5" />
+              </button>
+            </TooltipTrigger>
+          </div>
+        </div>
+
+        {message ? (
+          <div
+            className={cn(
+              'border-b border-border px-6 py-3 text-sm font-medium',
+              message.type === 'success'
+                ? 'bg-emerald-500/10 text-emerald-900 dark:text-emerald-100'
+                : 'bg-destructive/10 text-destructive'
+            )}
+          >
+            {message.text}
+          </div>
+        ) : null}
+
+        <div className="p-6">
+          <section>
+            <h2 className="mb-4 border-b border-border pb-2 text-lg font-semibold text-foreground">
+              Profile information
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="profile-email" className="text-muted-foreground">
+                  Email
+                </Label>
+                <Input
+                  id="profile-email"
+                  type="email"
+                  value={user?.email || ''}
+                  disabled
+                  className="mt-1.5 bg-muted/50"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="profile-name" className="text-muted-foreground">
+                  Full name
+                </Label>
+                <Input
+                  id="profile-name"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  disabled={!isEditingProfile}
+                  className={cn('mt-1.5', !isEditingProfile && 'bg-muted/50')}
+                  placeholder="Your name"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="profile-phone" className="text-muted-foreground">
+                  Phone number
+                </Label>
+                <Input
+                  id="profile-phone"
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  disabled={!isEditingProfile}
+                  className={cn('mt-1.5', !isEditingProfile && 'bg-muted/50')}
+                  placeholder="+12345678901"
+                />
+                {isEditingProfile ? (
+                  <p className="mt-1.5 text-xs text-muted-foreground">International format, e.g. +12345678901</p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <Dialog
+        open={passwordModalOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setPasswordModalOpen(true);
+          } else if (!isChangingPassword) {
+            closePasswordModal();
+          }
+        }}
+      >
+        <DialogContent
+          overlayClassName="bg-black/20 backdrop-blur-sm supports-backdrop-filter:backdrop-blur-sm"
+          className="sm:max-w-md"
+          showCloseButton={false}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <KeyRound className="size-5 text-muted-foreground" aria-hidden />
+              Change password
+            </DialogTitle>
+            <DialogDescription>
+              New password must be at least 6 characters.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+              <Input
+                id="profile-modal-new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="mt-1.5"
+                placeholder="..."
+                autoComplete="new-password"
+                disabled={isChangingPassword}
               />
-            ) : (
-              <FiUser className="text-2xl" />
-            )}
-          </div>
-          
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              {profile?.full_name || user?.email}
-            </h1>
-            <p className="text-gray-600 text-sm">
-              Member since {user?.created_at ? format(new Date(user.created_at), 'MMMM yyyy') : 'recently'}
-            </p>
-          </div>
-        </div>
-        
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2 px-4 py-1 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors duration-200"
-        >
-          <FiLogOut className='text-primary'/> Sign Out
-        </button>
-      </div>
-
-      {/* Message Display */}
-      {message && (
-        <div
-          className={`p-3 mb-6 rounded-md font-medium ${
-            message.type === 'success'
-              ? 'bg-green-50 text-green-700 border border-green-200'
-              : 'bg-red-50 text-red-700 border border-red-200'
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
-
-      {/* Profile Information Section */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Profile Information</h3>
-        
-        {/* Email Field */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
-            type="email"
-            value={user?.email || ''}
-            disabled
-            className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-600"
-          />
-        </div>
-
-        {/* Full Name Field */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-1">
-            <label className="text-sm font-medium text-gray-700">
-              Full Name
-            </label>
-            {!isEditingName ? (
+            </div>
+          <div className="flex flex-row justify-center gap-4 border-t border-border pt-4">
+            <TooltipTrigger label="Cancel">
               <button
-                onClick={handleStartEditName}
-                className="flex items-center gap-1 px-2 py-1 text-primary hover:text-primary-dark text-sm"
+                type="button"
+                onClick={closePasswordModal}
+                disabled={isChangingPassword}
+                className="icon-hit text-muted-foreground"
+                aria-label="Cancel"
               >
-                <FaPen size={14} />
+                <X className="size-5" />
               </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleUpdateName}
-                  disabled={saving}
-                  className="flex items-center gap-1 px-2 py-1 text-green-600 hover:text-green-700 text-sm"
-                  title="Save changes"
-                >
-                  {saving ? <FaSpinner className="animate-spin" size={14} /> : <FaCheck size={14} />}
-                </button>
-                <button
-                  onClick={handleCancelEditName}
-                  disabled={saving}
-                  className="flex items-center gap-1 px-2 py-1 text-red-600 hover:text-red-700 text-sm"
-                  title="Cancel changes"
-                >
-                  <FaTimes size={14} />
-                </button>
-              </div>
-            )}
-          </div>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            disabled={!isEditingName}
-            className={`w-full px-3 py-2 border border-gray-300 rounded-md ${
-              isEditingName ? 'bg-white' : 'bg-gray-100'
-            }`}
-            placeholder="Enter your full name"
-          />
-        </div>
-
-        {/* Phone Number Field */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-1">
-            <label className="text-sm font-medium text-gray-700">
-              Phone Number
-            </label>
-            {!isEditingPhone ? (
+            </TooltipTrigger>
+            <TooltipTrigger label="Save">
               <button
-                onClick={handleStartEditPhone}
-                className="flex items-center gap-1 px-2 py-1 text-primary hover:text-primary-dark text-sm"
+                type="button"
+                onClick={handleUpdatePassword}
+                disabled={isChangingPassword || !newPassword}
+                className="icon-hit text-primary"
+                aria-label="Save new password"
               >
-                <FaPen size={14} />
+                {isChangingPassword ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <Check className="size-5" />
+                )}
               </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleUpdatePhone}
-                  disabled={saving}
-                  className="flex items-center gap-1 px-2 py-1 text-green-600 hover:text-green-700 text-sm"
-                  title="Save changes"
-                >
-                  {saving ? <FaSpinner className="animate-spin" size={14} /> : <FaCheck size={14} />}
-                </button>
-                <button
-                  onClick={handleCancelEditPhone}
-                  disabled={saving}
-                  className="flex items-center gap-1 px-2 py-1 text-red-600 hover:text-red-700 text-sm"
-                  title="Cancel changes"
-                >
-                  <FaTimes size={14} />
-                </button>
-              </div>
-            )}
+            </TooltipTrigger>
           </div>
-          <input
-            type="tel"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            disabled={!isEditingPhone}
-            className={`w-full px-3 py-2 border border-gray-300 rounded-md ${
-              isEditingPhone ? 'bg-white' : 'bg-gray-100'
-            }`}
-            placeholder="+12345678901"
-          />
-          {isEditingPhone && (
-            <p className="text-xs text-gray-500 mt-1">
-              Example: +12345678901
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Change Password Section */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Change Password</h3>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            New Password
-          </label>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            placeholder="Enter new password"
-          />
-        </div>
-        
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Confirm New Password
-          </label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            placeholder="Confirm new password"
-          />
-        </div>
-        
-        <button
-          onClick={handleUpdatePassword}
-          disabled={isChangingPassword || !newPassword || !confirmPassword}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-        >
-          {isChangingPassword ? (
-            <>
-              <FaSpinner className="animate-spin" />
-              Updating...
-            </>
-          ) : (
-            'Update Password'
-          )}
-        </button>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

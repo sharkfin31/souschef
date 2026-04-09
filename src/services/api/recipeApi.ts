@@ -23,6 +23,7 @@ const getMockResponse = () => ({
     source_url: "https://example.com/mock-recipe",
     post_url: "https://example.com/mock-recipe",
     image_url: "https://via.placeholder.com/400x300/8B4513/FFFFFF?text=Mock+Recipe+Image",
+    video_url: null as string | null,
     source: "mock",
     extracted_via: "mock",
     ingredients: [
@@ -176,6 +177,7 @@ export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
     description: recipeData.description || '',
     sourceUrl: recipeData.source_url || recipeData.post_url || '',
     imageUrl: recipeData.image_url || '',
+    videoUrl: recipeData.video_url ?? null,
     ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
     instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
       id: crypto.randomUUID(),
@@ -253,6 +255,7 @@ export const extractRecipeFromMultipleImages = async (images: File[]): Promise<R
     description: recipeData.description || '',
     sourceUrl: '',
     imageUrl: recipeData.image_url || '',
+    videoUrl: recipeData.video_url ?? null,
     ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
     instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
       id: crypto.randomUUID(),
@@ -313,6 +316,7 @@ export const extractRecipeFromPDF = async (pdf: File): Promise<Recipe> => {
     description: recipeData.description || '',
     sourceUrl: '',
     imageUrl: recipeData.image_url || '',
+    videoUrl: recipeData.video_url ?? null,
     ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
     instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
       id: crypto.randomUUID(),
@@ -370,6 +374,7 @@ export const extractRecipeFromText = async (text: string): Promise<Recipe> => {
     description: recipeData.description || '',
     sourceUrl: '',
     imageUrl: recipeData.image_url || '',
+    videoUrl: recipeData.video_url ?? null,
     ingredients: (recipeData.ingredients || []).map((ing: any) => processIngredient(ing, recipeData.recipe_id)),
     instructions: (recipeData.instructions || []).map((inst: any, index: number) => ({
       id: crypto.randomUUID(),

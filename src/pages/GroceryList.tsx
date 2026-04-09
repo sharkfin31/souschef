@@ -6,10 +6,28 @@ import '../assets/list-animations.css';
 import './GroceryList.css';
 import { getGroceryLists, updateGroceryItemStatus, createCustomList, moveItemToList, deleteGroceryList, deleteGroceryItem, updateGroceryListName, shareMultipleGroceryLists, clearAllItemsFromList } from '../services/grocery/groceryService';
 import { GroceryList as GroceryListType } from '../types/recipe';
-import { FaSpinner, FaShoppingBasket, FaPlus, FaTrash, FaChevronUp, FaShareAlt, FaCheck } from 'react-icons/fa';
-import { FaPen, FaXmark } from "react-icons/fa6";
+import {
+  Check,
+  ChevronUp,
+  Loader2,
+  Pencil,
+  Plus,
+  Share2,
+  ShoppingBasket,
+  Trash2,
+  X,
+} from 'lucide-react';
 import ShareListsModal from '../components/ShareListsModal';
 import { useNotification } from '../context/NotificationContext';
+import { cn } from '@/lib/utils';
+import { TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 // Helper functions for ingredient normalization
 const normalizeIngredientName = (name: string): string => {
@@ -317,12 +335,14 @@ const GroceryList = () => {
   const renderLists = () => {
     if (lists.length === 0) {
       return (
-        <div>
-          <h1 className="text-2xl font-bold mb-6">Grocery Lists</h1>
-          <div className="bg-gray-50 p-8 rounded-md text-center">
-            <FaShoppingBasket className="text-4xl text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 mb-2">You don't have any grocery lists yet.</p>
-            <p className="text-gray-500">
+        <div className="text-foreground">
+          <h1 className="mb-6 flex min-h-12 items-center text-2xl font-bold leading-tight tracking-tight">
+            Grocery Lists
+          </h1>
+          <div className="rounded-xl border border-dashed border-muted-foreground/25 bg-muted/30 p-10 text-center text-sm leading-relaxed">
+            <ShoppingBasket className="mx-auto mb-4 size-12 text-muted-foreground" />
+            <p className="mb-2 font-medium text-foreground">You don&apos;t have any grocery lists yet.</p>
+            <p className="text-muted-foreground">
               Create a grocery list from a recipe to get started.
             </p>
           </div>
@@ -332,71 +352,93 @@ const GroceryList = () => {
     
     return (
       <DndProvider backend={HTML5Backend}>
-        <div>
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold">Grocery Lists</h1>
-            
-            <div className="flex items-center gap-4">
+        <div className="text-foreground">
+          <div className="mb-6 flex min-h-12 items-center justify-between gap-4">
+            <h1 className="text-2xl font-bold leading-tight tracking-tight">Grocery Lists</h1>
+
+            <div className="flex items-center gap-2">
               <div className="create-list-container">
-                <button 
-                  onClick={() => setShowInput(true)}
-                  className={`btn btn-primary flex items-center create-list-button ${showInput ? 'hidden' : ''}`}
+                <TooltipTrigger label="New grocery list" className="relative h-10 w-10 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowInput(true)}
+                    className={cn(
+                      'create-list-button inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      showInput && 'hidden'
+                    )}
+                    aria-label="New grocery list"
+                  >
+                    <Plus className="size-5" />
+                  </button>
+                </TooltipTrigger>
+
+                <form
+                  onSubmit={handleCreateList}
+                  className={cn('create-list-form flex items-center gap-2', showInput && 'visible')}
                 >
-                  <FaPlus />
-                </button>
-                
-                <form onSubmit={handleCreateList} className={`create-list-form ${showInput ? 'visible' : ''}`}>
                   <input
                     type="text"
                     value={newListName}
                     onChange={(e) => setNewListName(e.target.value)}
                     placeholder="New list name"
-                    className="input mr-2 w-48"
+                    className="input mr-0 w-48 rounded-lg border-border text-sm"
                     disabled={creatingList}
                     autoFocus={showInput}
                   />
-                  <div className="flex space-x-2">
+                  <div className="flex items-center gap-1">
                     {newListName.trim() ? (
-                      <button 
-                        type="submit" 
-                        className="text-primary hover:text-green-600 p-2"
-                        disabled={creatingList}
-                      >
-                        {creatingList ? <FaSpinner className="animate-spin" /> : <FaCheck />}
-                      </button>
+                      <TooltipTrigger label="Create list" className="inline-flex items-center">
+                        <button
+                          type="submit"
+                          className="icon-hit text-primary"
+                          disabled={creatingList}
+                          aria-label="Create list"
+                        >
+                          {creatingList ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
+                        </button>
+                      </TooltipTrigger>
                     ) : null}
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        setShowInput(false);
-                        setNewListName('');
-                      }}
-                      className="text-gray-500 hover:text-red-500 p-2"
-                    >
-                      <FaXmark size={18} />
-                    </button>
+                    <TooltipTrigger label="Cancel" className="inline-flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowInput(false);
+                          setNewListName('');
+                        }}
+                        className="icon-hit text-muted-foreground"
+                        aria-label="Cancel"
+                      >
+                        <X className="size-5" />
+                      </button>
+                    </TooltipTrigger>
                   </div>
                 </form>
               </div>
-              
-              {/* Share multiple lists button */}
+
               {lists.length > 0 && (
-                <button 
-                  onClick={() => setShowShareModal(true)}
-                  className="btn btn-secondary flex items-center"
-                  title="Share multiple lists"
-                >
-                  <FaShareAlt />
-                </button>
+                <TooltipTrigger label="Share grocery lists" className="inline-flex items-center self-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowShareModal(true)}
+                    className="icon-hit text-primary"
+                    aria-label="Share grocery lists"
+                  >
+                    <Share2 className="size-5" />
+                  </button>
+                </TooltipTrigger>
               )}
             </div>
           </div>
           
           <div className="grid grid-cols-1 gap-6">
             {lists.map(list => (
-            <div key={list.id} className="bg-white rounded-lg shadow-md overflow-hidden h-full">
+            <div key={list.id} className="h-full overflow-hidden rounded-lg border border-border bg-card shadow-sm">
               <div 
-                className={`${list.name === 'Master Grocery List' ? 'bg-primary' : 'bg-secondary'} text-white p-4 flex justify-between items-start cursor-pointer transition-colors duration-200`} 
+                className={`${
+                  list.name === 'Master Grocery List'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border-b-2 border-primary/40 bg-muted text-foreground'
+                } flex cursor-pointer items-center justify-between px-4 py-5 transition-colors duration-200`} 
                 onClick={() => toggleListCollapse(list.id)}
               >
                 <div className="flex-grow">
@@ -406,35 +448,69 @@ const GroceryList = () => {
                         type="text"
                         value={editedListName}
                         onChange={(e) => setEditedListName(e.target.value)}
-                        className="bg-transparent text-white border border-white/50 px-2 py-1 rounded w-full mr-2 focus:outline-none focus:border-white"
+                        className={cn(
+                          'mr-2 w-full rounded border px-2 py-1 text-sm focus:outline-none',
+                          list.name === 'Master Grocery List'
+                            ? 'border-white/50 bg-transparent text-primary-foreground placeholder:text-primary-foreground/70 focus:border-white'
+                            : 'border-border bg-background text-foreground'
+                        )}
                         autoFocus
                       />
-                      <div className="flex mr-2">
-                        <button
-                          onClick={() => handleSaveListName(list.id)}
-                          className="text-white hover:text-green-300 p-2"
-                          title="Save list name"
-                        >
-                          <FaCheck size={14}/>
-                        </button>
-                        <button
-                          onClick={() => setEditingListId(null)}
-                          className="text-white hover:text-red-300 p-2"
-                          title="Cancel editing"
-                        >
-                          <FaXmark size={18}/>
-                        </button>
+                      <div className="mr-2 flex items-center gap-0.5">
+                        <TooltipTrigger label="Save list name">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaveListName(list.id);
+                            }}
+                            className={cn(
+                              'icon-hit',
+                              list.name === 'Master Grocery List'
+                                ? 'text-primary-foreground'
+                                : 'text-foreground hover:text-primary'
+                            )}
+                            aria-label="Save list name"
+                          >
+                            <Check className="size-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipTrigger label="Cancel editing">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingListId(null);
+                            }}
+                            className={cn(
+                              'icon-hit',
+                              list.name === 'Master Grocery List'
+                                ? 'text-primary-foreground'
+                                : 'text-muted-foreground hover:text-destructive'
+                            )}
+                            aria-label="Cancel editing"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        </TooltipTrigger>
                       </div>
                     </div>
                   ) : (
-                    <h2 className="text-xl font-semibold flex items-center">
+                    <h2 className="flex items-center text-lg font-semibold leading-tight">
                       {list.name}
                       {(() => {
                         const uniqueCount = getUniqueItemsCount(list.items);
                         
                         if (uniqueCount !== list.items.length) {
                           return (
-                            <span className="ml-2 text-sm bg-white/20 px-2 py-0.5 rounded-full">
+                            <span
+                              className={cn(
+                                'ml-2 rounded-full px-2 py-0.5 text-sm',
+                                list.name === 'Master Grocery List'
+                                  ? 'bg-primary-foreground/20'
+                                  : 'bg-foreground/10 text-muted-foreground'
+                              )}
+                            >
                               {uniqueCount} unique / {list.items.length} total
                             </span>
                           );
@@ -444,46 +520,77 @@ const GroceryList = () => {
                     </h2>
                   )}
                 </div>
-                <div className="flex space-x-2 items-center">
+                <div className="flex items-center gap-1">
                   {list.name === 'Master Grocery List' && editingListId !== list.id && list.items.length > 0 && (
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowClearAllConfirm(list.id);
-                      }}
-                      disabled={clearingAllItems === list.id}
-                      className="text-white opacity-80 hover:opacity-100 p-1 transition-opacity"
-                      title="Clear all items"
-                    >
-                      {clearingAllItems === list.id ? <FaSpinner className="animate-spin" /> : <FaTrash />}
-                    </button>
+                    <TooltipTrigger label="Clear all items">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowClearAllConfirm(list.id);
+                        }}
+                        disabled={clearingAllItems === list.id}
+                        className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-primary-foreground transition-colors duration-150 hover:bg-white hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/50 disabled:opacity-50"
+                        aria-label="Clear all items"
+                      >
+                        {clearingAllItems === list.id ? (
+                          <Loader2 className="size-4 animate-spin text-primary-foreground" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
                   )}
                   {list.name !== 'Master Grocery List' && editingListId !== list.id && (
                     <>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditList(list.id, list.name);
-                        }}
-                        className="text-white opacity-80 hover:opacity-100 p-1 transition-opacity"
-                        title="Edit list name"
-                      >
-                        <FaPen />
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteList(list.id);
-                        }}
-                        disabled={deletingListId === list.id}
-                        className="text-white opacity-80 hover:opacity-100 p-1 transition-opacity"
-                        title="Delete list"
-                      >
-                        {deletingListId === list.id ? <FaSpinner className="animate-spin" /> : <FaTrash />}
-                      </button>
+                      <TooltipTrigger label="Edit list name">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditList(list.id, list.name);
+                          }}
+                          className="icon-hit text-foreground"
+                          aria-label="Edit list name"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipTrigger label="Delete list">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteList(list.id);
+                          }}
+                          disabled={deletingListId === list.id}
+                          className="icon-hit icon-hit--destructive text-destructive"
+                          aria-label="Delete list"
+                        >
+                          {deletingListId === list.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4" />
+                          )}
+                        </button>
+                      </TooltipTrigger>
                     </>
                   )}
-                  <FaChevronUp className={`collapse-icon ${collapsedLists.has(list.id) ? '' : 'up'}`} />
+                  <span
+                    className={cn(
+                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                      list.name === 'Master Grocery List' ? 'bg-primary-foreground/15' : 'bg-foreground/5'
+                    )}
+                    aria-hidden
+                  >
+                    <ChevronUp
+                      className={cn(
+                        'collapse-icon size-4',
+                        list.name === 'Master Grocery List' ? 'text-primary-foreground' : 'text-muted-foreground',
+                        collapsedLists.has(list.id) ? '' : 'up'
+                      )}
+                    />
+                  </span>
                 </div>
               </div>
               
@@ -507,16 +614,16 @@ const GroceryList = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <FaSpinner className="animate-spin text-primary text-2xl" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (shareSuccess) {
     return (
-      <div>
-        <div className="mb-6 bg-green-50 text-green-700 p-4 rounded-md flex items-center">
-          <FaCheck className="mr-2" />
+      <div className="text-foreground">
+        <div className="mb-6 flex items-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm font-medium text-emerald-900 dark:text-emerald-100">
+          <Check className="mr-2 size-4 shrink-0" />
           Grocery list shared successfully!
         </div>
         {renderLists()}
@@ -525,7 +632,7 @@ const GroceryList = () => {
   }
 
   return (
-    <>
+    <div className="text-foreground">
       {renderLists()}
       <ShareListsModal
         isOpen={showShareModal}
@@ -534,40 +641,49 @@ const GroceryList = () => {
         onShare={handleShareMultipleLists}
       />
       
-      {/* Clear All Items Confirmation Modal */}
-      {showClearAllConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Clear All Items</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to clear all items from the Master Grocery List? This action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-3">
+      <Dialog
+        open={!!showClearAllConfirm}
+        onOpenChange={(open) => {
+          if (!open) setShowClearAllConfirm(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton>
+          <DialogHeader className="pr-10">
+            <DialogTitle>Clear all items</DialogTitle>
+            <DialogDescription>
+              Remove every item from the Master Grocery List? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <TooltipTrigger label="Cancel">
               <button
+                type="button"
+                className="icon-hit text-muted-foreground"
                 onClick={() => setShowClearAllConfirm(null)}
-                className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+                aria-label="Cancel"
               >
-                Cancel
+                <X className="size-5" />
               </button>
+            </TooltipTrigger>
+            <TooltipTrigger label="Clear all items">
               <button
-                onClick={() => handleClearAllItems(showClearAllConfirm)}
+                type="button"
+                className="icon-hit icon-hit--destructive text-destructive"
+                onClick={() => showClearAllConfirm && handleClearAllItems(showClearAllConfirm)}
                 disabled={clearingAllItems === showClearAllConfirm}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                aria-label="Clear all items"
               >
                 {clearingAllItems === showClearAllConfirm ? (
-                  <span className="flex items-center">
-                    <FaSpinner className="animate-spin mr-2" />
-                    Clearing...
-                  </span>
+                  <Loader2 className="size-5 animate-spin" />
                 ) : (
-                  'Clear All'
+                  <Trash2 className="size-5" />
                 )}
               </button>
-            </div>
+            </TooltipTrigger>
           </div>
-        </div>
-      )}
-    </>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
@@ -601,48 +717,58 @@ const DraggableItem = ({ item, listId, handleToggleItem, handleDeleteItem }: Dra
         cursor: item.id ? 'move' : 'default'
       }}
     >
-      <div className="flex items-center flex-1">
-        <button
-          onClick={() => item.id && handleToggleItem(listId, item.id, item.completed)}
-          className={`w-5 h-5 rounded-full border flex items-center justify-center mr-3 transition-all duration-200 ${isCompleted
-            ? 'bg-green-500 border-green-500 text-white'
-            : 'border-gray-300 hover:border-green-300'
-          }`}
-          disabled={!item.id}
-        >
-          {isCompleted && <FaCheck className="text-xs" />}
-        </button>
+      <div className="flex flex-1 items-center">
+        <TooltipTrigger label={isCompleted ? 'Mark as not done' : 'Mark as done'}>
+          <button
+            type="button"
+            onClick={() => item.id && handleToggleItem(listId, item.id, item.completed)}
+            className={`mr-3 flex size-5 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${isCompleted
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-border hover:border-primary/50'
+            }`}
+            disabled={!item.id}
+            aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+          >
+            {isCompleted && <Check className="size-3" />}
+          </button>
+        </TooltipTrigger>
         <div className="flex-1">
           <div className="grid grid-cols-2">
             <span
-              className={`transition-all duration-300 ${isCompleted ? 'line-through text-gray-400' : ''}`}
+              className={cn(
+                'text-sm transition-all duration-300',
+                isCompleted && 'text-muted-foreground line-through'
+              )}
             >
               {item.name.charAt(0).toUpperCase() + item.name.slice(1)}
             </span>
-            <span className="text-gray-500 pl-4">
+            <span className="pl-4 text-sm tabular-nums text-muted-foreground">
               {item.quantity} {item.unit}
             </span>
           </div>
           {item.recipeTitle && (
-            <span className="text-xs text-gray-500 block">
+            <span className="block text-xs text-muted-foreground">
               From: {item.recipeTitle.includes(',') ? 'Multiple recipes' : item.recipeTitle}
               {item.recipeTitle.includes(',') && (
-                <span className="text-xs text-gray-400 ml-1">(aggregated)</span>
+                <span className="ml-1 text-xs text-muted-foreground/80">(aggregated)</span>
               )}
             </span>
           )}
         </div>
       </div>
       
-      <div className="ml-2 flex-shrink-0">
+      <div className="ml-2 shrink-0">
         {item.id && (
-          <button 
-            onClick={() => handleDeleteItem(listId, item.id!)}
-            className="text-gray-400 hover:text-red-500 p-1"
-            title="Delete item"
-          >
-            <FaXmark />
-          </button>
+          <TooltipTrigger label="Remove item">
+            <button
+              type="button"
+              onClick={() => handleDeleteItem(listId, item.id!)}
+              className="icon-hit text-muted-foreground hover:text-destructive"
+              aria-label="Delete item"
+            >
+              <X className="size-4" />
+            </button>
+          </TooltipTrigger>
         )}
       </div>
     </li>
@@ -718,11 +844,11 @@ const DroppableList = ({ list, handleToggleItem, handleDeleteItem, handleMoveIte
   return (
     <div 
       ref={drop} 
-      className={`p-4 ${isOver ? 'bg-blue-50' : ''}`}
+      className={cn('p-4', isOver && 'bg-primary/5')}
       style={{ transition: 'background-color 0.2s ease' }}
     >
       <div className="max-h-[400px] overflow-y-auto pr-4">
-        <ul className="divide-y divide-gray-200 grocery-list">
+        <ul className="divide-y divide-border grocery-list">
           {sortedItems.map((item, index) => (
             <DraggableItem 
               key={item.id || `aggregated-${index}`}
@@ -736,7 +862,7 @@ const DroppableList = ({ list, handleToggleItem, handleDeleteItem, handleMoveIte
       </div>
       
       {list.items.length === 0 && (
-        <p className="text-gray-500 text-center py-4">
+        <p className="py-4 text-center text-sm text-muted-foreground">
           This list is empty.
         </p>
       )}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { FaSpinner, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LoginForm = () => {
   const [email, setEmail] = useState('');
@@ -77,7 +77,7 @@ const LoginForm = () => {
               onClick={() => setShowPassword(!showPassword)}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
             >
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
         </div>
@@ -88,7 +88,7 @@ const LoginForm = () => {
           disabled={isSubmitting}
         >
           {isSubmitting ? (
-            <FaSpinner className="animate-spin mr-2" />
+            <Loader2 className="mr-2 size-4 animate-spin" />
           ) : null}
           {isSubmitting ? 'Signing In...' : 'Sign In'}
         </button>

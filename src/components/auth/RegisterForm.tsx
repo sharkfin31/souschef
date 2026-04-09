@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { FaSpinner, FaEye, FaEyeSlash, FaQuestionCircle } from 'react-icons/fa';
+import { Eye, EyeOff, HelpCircle, Loader2 } from 'lucide-react';
 import WhatsAppHelpModal from './WhatsAppHelpModal';
 
 interface RegisterFormProps {
@@ -133,7 +133,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
               onClick={() => setShowWhatsAppHelp(true)}
               className="text-blue-600 hover:text-blue-800 flex items-center text-sm"
             >
-              <FaQuestionCircle className="mr-1" size={14} />
+              <HelpCircle className="mr-1 size-3.5" />
               How to get this?
             </button>
           </div>
@@ -170,7 +170,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
               onClick={() => setShowPassword(!showPassword)}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
             >
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
         </div>
@@ -194,7 +194,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
             >
-              {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+              {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
         </div>
@@ -205,7 +205,7 @@ const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
           disabled={isSubmitting}
         >
           {isSubmitting ? (
-            <FaSpinner className="animate-spin mr-2" />
+            <Loader2 className="mr-2 size-4 animate-spin" />
           ) : null}
           {isSubmitting ? 'Creating Account...' : 'Create Account'}
         </button>

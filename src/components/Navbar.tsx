@@ -1,36 +1,51 @@
 import { Link } from 'react-router-dom';
+import { ShoppingBasket, User } from 'lucide-react';
+import { TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '../context/AuthContext';
-import { FiUser } from 'react-icons/fi';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 const Navbar = () => {
   const { user, loading } = useAuth();
 
   return (
-    <nav className="bg-white shadow-md">
+    <nav className="border-b border-border bg-card shadow-sm">
       <div className="container mx-auto px-4 py-4">
-        <div className="flex justify-between items-center">
-          <Link to="/" className="flex items-center space-x-2">
+        <div className="flex items-center justify-between">
+          <Link
+            to="/"
+            className="flex items-center gap-2 text-foreground transition-opacity hover:opacity-90"
+          >
             <img src="/favicon.svg" alt="SousChef Logo" className="h-8 w-8" />
-            <span className="text-xl font-bold text-text">SousChef</span>
+            <span className="text-xl font-bold tracking-tight">souschef</span>
           </Link>
-          <div className="flex space-x-6 items-center">
-            <Link to="/grocery-list" className="text-text hover:text-primary transition-colors">
-              Grocery Lists
-            </Link>
-            
-            {!loading && (
-              user ? (
-                <div className="flex items-center space-x-4">
-                  <Link to="/profile" className="text-text hover:text-primary transition-colors flex items-center">
-                    <FiUser className="mr-1" />
+          <div className="flex items-center gap-4 sm:gap-2">
+            <TooltipTrigger label="Grocery lists">
+              <Link
+                to="/grocery-list"
+                className="icon-hit text-foreground"
+                aria-label="Grocery lists"
+              >
+                <ShoppingBasket className="size-5" />
+              </Link>
+            </TooltipTrigger>
+
+            {!loading &&
+              (user ? (
+                <TooltipTrigger label="Profile">
+                  <Link
+                    to="/profile"
+                    aria-label="Profile"
+                    className={cn('icon-hit text-foreground')}
+                  >
+                    <User className="size-5" />
                   </Link>
-                </div>
+                </TooltipTrigger>
               ) : (
-                <Link to="/login" className="text-text hover:text-primary transition-colors">
+                <Link to="/login" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
                   Sign In
                 </Link>
-              )
-            )}
+              ))}
           </div>
         </div>
       </div>
