@@ -876,7 +876,7 @@ const RecipeDetail = () => {
             <div
               className={cn(
                 effectiveRecipeVideoMode === 'embedded'
-                  ? 'mb-6 w-full max-w-3xl'
+                  ? 'mx-auto mb-6 w-full max-w-3xl'
                   : 'pointer-events-none fixed top-0 left-0 z-[-1] h-px w-px overflow-hidden opacity-0'
               )}
             >
