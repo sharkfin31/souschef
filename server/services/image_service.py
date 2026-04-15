@@ -12,7 +12,9 @@ import os
 import subprocess
 import asyncio
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+
+ProgressCb = Optional[Callable[[str, str, int], Awaitable[None]]]
 from PIL import Image
 import pytesseract
 from fastapi import UploadFile, HTTPException, BackgroundTasks
@@ -202,9 +204,18 @@ async def process_and_save_recipe(text: str, source_info: str, image_url: str, i
         raise HTTPException(status_code=500, detail="Failed to process recipe")
 
 
-async def process_multiple_recipe_images(images: List[UploadFile], background_tasks: BackgroundTasks = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+async def process_multiple_recipe_images(
+    images: List[UploadFile],
+    background_tasks: BackgroundTasks = None,
+    user_id: Optional[str] = None,
+    on_progress: ProgressCb = None,
+) -> Dict[str, Any]:
     """Process one or more recipe images and extract structured recipe data"""
-    
+
+    async def emit(stage: str, label: str, pct: int) -> None:
+        if on_progress:
+            await on_progress(stage, label, pct)
+
     # Validate Tesseract installation
     if not check_tesseract_installed():
         raise HTTPException(
@@ -225,49 +236,53 @@ async def process_multiple_recipe_images(images: List[UploadFile], background_ta
     
     try:
         logger.info(f"Processing {len(images)} image(s) for recipe extraction...")
-        
+        await emit("fetching", "Saving uploads…", 8)
+
         # Process images efficiently
         if len(images) == 1:
             # Single image optimization
             file_path, image_url = await save_uploaded_image(images[0])
             saved_files.append(file_path)
+            await emit("scraping", "Running OCR…", 30)
             combined_text = await extract_text_from_image(file_path)
             primary_image_url = image_url
-            
+
         else:
             # Multiple images with proper ordering context
             image_texts = []
-            
+
             for i, image in enumerate(images):
                 # Rate limiting between images
                 if i > 0:
                     await asyncio.sleep(0.3)
-                
+
                 logger.info(f"Processing image {i+1}/{len(images)}: {image.filename}")
-                
+                pct = 15 + int(35 * (i + 1) / max(len(images), 1))
+                await emit("scraping", f"OCR image {i + 1} of {len(images)}…", pct)
+
                 # Save and process image
                 file_path, image_url = await save_uploaded_image(image)
                 saved_files.append(file_path)
-                
+
                 # Extract text
                 extracted_text = await extract_text_from_image(file_path)
-                
+
                 if extracted_text:
                     image_texts.append(f"--- Image {i+1} ---\n{extracted_text}")
-                
+
                 # Use first image as primary
                 if i == 0:
                     primary_image_url = image_url
-            
+
             # Combine all text with proper context
             if image_texts:
                 combined_text = (
                     "IMPORTANT: The following content comes from multiple images in order. "
                     "Process them sequentially - ingredients may be in early images, "
-                    "instructions in later images.\n\n" + 
-                    "\n\n".join(image_texts)
+                    "instructions in later images.\n\n"
+                    + "\n\n".join(image_texts)
                 )
-        
+
         # Validate extracted text
         if not combined_text.strip():
             raise HTTPException(
@@ -276,95 +291,48 @@ async def process_multiple_recipe_images(images: List[UploadFile], background_ta
             )
         
         logger.info(f"Total extracted text: {len(combined_text)} characters")
-        
+
         # Process with AI after brief delay
         await asyncio.sleep(0.5)
-        
+
+        await emit("ai", "Structuring with AI…", 62)
+
         # Generate source info
         source_info = (
-            f"Image upload: {images[0].filename}" if len(images) == 1 
+            f"Image upload: {images[0].filename}"
+            if len(images) == 1
             else f"Multiple image upload: {len(images)} images"
         )
-        
+
+        await emit("saving", "Saving to your library…", 85)
         # Process and save recipe
         result = await process_and_save_recipe(
-            combined_text, 
-            source_info, 
-            primary_image_url or "", 
+            combined_text,
+            source_info,
+            primary_image_url or "",
             len(images),
-            user_id
+            user_id,
         )
-        
-        # Schedule cleanup
+
+        # Schedule cleanup (sync when no task queue, e.g. async import jobs)
         if saved_files:
-            background_tasks.add_task(cleanup_files, saved_files)
-        
+            if background_tasks is not None:
+                background_tasks.add_task(cleanup_files, saved_files)
+            else:
+                cleanup_files(saved_files)
+
+        await emit("completed", "Imported", 100)
         return result
-        
+
     except HTTPException:
         # Clean up on known errors
         cleanup_files(saved_files)
         raise
-        
+
     except Exception as e:
         # Clean up on unexpected errors
         cleanup_files(saved_files)
         logger.error(f"Unexpected error processing images: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during image processing")
-    
-    saved_files = []
-    combined_text = ""
-    primary_image_url = None
-    
-    try:
-        # Handle single image case more efficiently
-        if len(images) == 1:
-            file_path, image_url = await save_uploaded_image(images[0])
-            saved_files.append(file_path)
-            combined_text = await extract_text_from_image(file_path)
-            primary_image_url = image_url
-        else:
-            # Process multiple images in order
-            for i, image in enumerate(images):
-                # Add delay between processing images
-                if i > 0:
-                    await asyncio.sleep(0.3)
-                    
-                # Save the image
-                file_path, image_url = await save_uploaded_image(image)
-                saved_files.append(file_path)
-                
-                # Extract text from the image
-                extracted_text = await extract_text_from_image(file_path)
-                combined_text += f"\n\n--- Image {i+1} (Order is important) ---\n{extracted_text}"
-                
-                # Use the first image as the primary image
-                if i == 0:
-                    primary_image_url = image_url
-                    
-            # Add a note about image order for the AI
-            combined_text = "IMPORTANT: Images are provided in sequential order. Process them in this order.\n\n" + combined_text
-        
-        # Add delay before AI processing to ensure all OCR is complete
-        await asyncio.sleep(0.5)
-        
-        # Process and save the recipe
-        source_info = f"Image upload: {images[0].filename}" if len(images) == 1 \
-            else f"Multiple image upload: {len(images)} images"
-            
-        result = await process_and_save_recipe(combined_text, source_info, primary_image_url, len(images), user_id)
-        
-        # Schedule cleanup after processing is complete
-        if saved_files:
-            background_tasks.add_task(cleanup_files, saved_files)
-        
-        # Add image count to the result
-        result["image_count"] = len(images)
-        return result
-    
-    except Exception as e:
-        # Clean up the files in case of error
-        for file_path in saved_files:
-            if file_path.exists():
-                file_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail="An unexpected error occurred during image processing"
+        )

@@ -1,5 +1,8 @@
+import json
 import re
-from typing import Dict, Any, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+ProgressCb = Optional[Callable[[str, str, int], Awaitable[None]]]
 from urllib.parse import urlparse
 from services.instagram_service import get_recipe_from_instagram, validate_instagram_url
 from services.ai_service import process_with_ai
@@ -18,31 +21,41 @@ class RecipeExtractionService:
         self.timeout = 30
         self.max_content_length = 1000000  # 1MB limit for web content
     
-    async def extract_recipe_from_url(self, url: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+    async def extract_recipe_from_url(
+        self,
+        url: str,
+        user_id: Optional[str] = None,
+        on_progress: ProgressCb = None,
+    ) -> Dict[str, Any]:
         """
         Main entry point for recipe extraction from URLs
         Routes to appropriate extraction method based on URL type
         """
+
+        async def emit(stage: str, label: str, pct: int) -> None:
+            if on_progress:
+                await on_progress(stage, label, pct)
+
         try:
             if not url or not isinstance(url, str):
                 return {"error": "Invalid URL provided"}
-            
+
             url = url.strip()
-            
+
             # Validate URL format
             if not self._is_valid_url(url):
                 return {"error": "Invalid URL format. Please provide a valid HTTP/HTTPS URL."}
-            
+
             logger.info(f"Processing URL: {url}")
-            
+            await emit("validating", "Validating URL…", 5)
+
             # Route to appropriate extraction service
             if validate_instagram_url(url):
                 logger.info("Detected Instagram URL - routing to Instagram service")
-                return await get_recipe_from_instagram(url, user_id)
-            else:
-                logger.info("Detected web URL - routing to web scraping service")
-                return await self._extract_from_web_url(url, user_id)
-                
+                return await get_recipe_from_instagram(url, user_id, on_progress=on_progress)
+            logger.info("Detected web URL - routing to web scraping service")
+            return await self._extract_from_web_url(url, user_id, on_progress=on_progress)
+
         except Exception as e:
             logger.error(f"Error in recipe extraction service: {e}")
             return {"error": f"Failed to process URL: {str(e)}"}
@@ -55,35 +68,61 @@ class RecipeExtractionService:
         except Exception:
             return False
     
-    async def _extract_from_web_url(self, url: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+    async def _extract_from_web_url(
+        self,
+        url: str,
+        user_id: Optional[str] = None,
+        on_progress: ProgressCb = None,
+    ) -> Dict[str, Any]:
         """Extract recipe content from general web URLs"""
+
+        async def emit(stage: str, label: str, pct: int) -> None:
+            if on_progress:
+                await on_progress(stage, label, pct)
+
         try:
+            await emit("fetching", "Fetching page…", 12)
             # Fetch the webpage content
             html_content = await self._fetch_webpage_content(url)
             if not html_content:
                 return {"error": "Failed to fetch webpage content or content is empty"}
-            
-            # Extract recipe content using multiple methods
-            recipe_content = await self._extract_recipe_content_from_html(html_content, url)
+
+            await emit("parsing", "Parsing recipe content…", 35)
+            soup = BeautifulSoup(html_content, "html.parser")
+            # Prefer JSON-LD Recipe text when present (one OpenRouter pass on that text).
+            recipe_ld_node = self._first_recipe_dict_from_json_ld_scripts(soup)
+            if recipe_ld_node:
+                recipe_content = self._format_json_ld_recipe(recipe_ld_node)
+            else:
+                recipe_content = None
+            if not recipe_content or len(recipe_content.strip()) < 40:
+                recipe_content = await self._extract_recipe_content_from_html(
+                    html_content, url, soup=soup
+                )
             if not recipe_content:
                 return {"error": "No recipe content found on the webpage"}
-            
-            logger.info(f"Extracted {len(recipe_content)} characters of content from web page")
-            
-            # Process with AI
+
+            logger.info(
+                "Single OpenRouter pass on scraped content (%s characters)",
+                len(recipe_content),
+            )
+            await emit("ai", "Structuring with AI…", 58)
             recipe_data = await process_with_ai(recipe_content)
             if not recipe_data:
                 return {"error": "AI failed to extract recipe information from the content"}
-            
+
+            await emit("cleanup", "Resolving images…", 78)
             # Extract image URL from the webpage
             image_url = self._extract_main_image_url(html_content, url)
-            
+
+            await emit("saving", "Saving to your library…", 88)
             # Save to database
             recipe_id = await save_recipe_to_db(recipe_data, url, image_url, user_id)
             if not recipe_id:
                 return {"error": "Failed to save recipe to database"}
-            
+
             logger.info(f"Successfully processed web recipe: {recipe_data.get('title')}")
+            await emit("completed", "Imported", 100)
             
             return {
                 "success": True,
@@ -141,10 +180,15 @@ class RecipeExtractionService:
             logger.error(f"Error fetching webpage: {e}")
             return None
     
-    async def _extract_recipe_content_from_html(self, html_content: str, url: str) -> Optional[str]:
+    async def _extract_recipe_content_from_html(
+        self,
+        html_content: str,
+        url: str,
+        soup: Optional[BeautifulSoup] = None,
+    ) -> Optional[str]:
         """Extract recipe content from HTML using multiple strategies"""
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = soup if soup is not None else BeautifulSoup(html_content, "html.parser")
             
             # Strategy 1: Look for JSON-LD structured data
             json_ld_content = self._extract_json_ld_recipe(soup)
@@ -172,33 +216,56 @@ class RecipeExtractionService:
             logger.error(f"Error parsing HTML content: {e}")
             return None
     
+    def _ld_json_dict_items(self, data: Any) -> List[dict]:
+        """Flatten JSON-LD root into a list of dict nodes (@graph, arrays, single object)."""
+        if isinstance(data, list):
+            return [x for x in data if isinstance(x, dict)]
+        if isinstance(data, dict):
+            graph = data.get("@graph")
+            if isinstance(graph, list):
+                return [x for x in graph if isinstance(x, dict)]
+            return [data]
+        return []
+
+    def _json_ld_types(self, item: dict) -> List[str]:
+        t = item.get("@type")
+        if t is None:
+            return []
+        if isinstance(t, str):
+            return [t]
+        if isinstance(t, list):
+            return [str(x) for x in t if x]
+        return [str(t)]
+
+    def _is_recipe_ld_item(self, item: dict) -> bool:
+        return "Recipe" in self._json_ld_types(item)
+
+    def _first_recipe_dict_from_json_ld_scripts(self, soup: BeautifulSoup) -> Optional[dict]:
+        """First schema.org Recipe object found in application/ld+json blocks (handles @graph)."""
+        try:
+            json_scripts = soup.find_all("script", {"type": "application/ld+json"})
+            for script in json_scripts:
+                raw = script.string or script.get_text()
+                if not raw or not str(raw).strip():
+                    continue
+                try:
+                    data = json.loads(str(raw).strip())
+                except json.JSONDecodeError:
+                    continue
+                for item in self._ld_json_dict_items(data):
+                    if self._is_recipe_ld_item(item):
+                        return item
+        except Exception as e:
+            logger.error(f"Error scanning JSON-LD for Recipe: {e}")
+        return None
+
     def _extract_json_ld_recipe(self, soup: BeautifulSoup) -> Optional[str]:
         """Extract recipe from JSON-LD structured data"""
         try:
-            import json
-            
-            # Find JSON-LD script tags
-            json_scripts = soup.find_all('script', {'type': 'application/ld+json'})
-            
-            for script in json_scripts:
-                try:
-                    data = json.loads(script.string)
-                    
-                    # Handle single object or array
-                    if isinstance(data, list):
-                        data_items = data
-                    else:
-                        data_items = [data]
-                    
-                    for item in data_items:
-                        if isinstance(item, dict) and item.get('@type') == 'Recipe':
-                            return self._format_json_ld_recipe(item)
-                            
-                except json.JSONDecodeError:
-                    continue
-            
-            return None
-            
+            node = self._first_recipe_dict_from_json_ld_scripts(soup)
+            if not node:
+                return None
+            return self._format_json_ld_recipe(node)
         except Exception as e:
             logger.error(f"Error extracting JSON-LD: {e}")
             return None
@@ -409,31 +476,45 @@ class RecipeExtractionService:
         except Exception:
             return img_src
     
-    async def extract_recipe_from_text(self, text: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+    async def extract_recipe_from_text(
+        self,
+        text: str,
+        user_id: Optional[str] = None,
+        on_progress: ProgressCb = None,
+    ) -> Dict[str, Any]:
         """
         Extract recipe from raw text content using AI processing
         """
+
+        async def emit(stage: str, label: str, pct: int) -> None:
+            if on_progress:
+                await on_progress(stage, label, pct)
+
         try:
             if not text or not text.strip():
                 return {"error": "No text content provided"}
-            
+
             logger.info(f"Processing text recipe for user: {user_id}")
-            
+            await emit("ai", "Structuring with AI…", 35)
+
             # Process the text content with AI
             structured_recipe = await process_with_ai(text)
-            
+
             if not structured_recipe:
                 return {"error": "Failed to extract recipe from text content"}
-            
+
             # Add metadata for text-based extraction
-            structured_recipe.update({
-                "source_url": "Text Input",
-                "post_url": None,
-                "image_url": None,
-                "source": "text",
-                "extracted_via": "text_input"
-            })
-            
+            structured_recipe.update(
+                {
+                    "source_url": "Text Input",
+                    "post_url": None,
+                    "image_url": None,
+                    "source": "text",
+                    "extracted_via": "text_input",
+                }
+            )
+
+            await emit("saving", "Saving to your library…", 82)
             # Save to database if user is authenticated
             if user_id:
                 try:
@@ -444,9 +525,10 @@ class RecipeExtractionService:
                     logger.error(f"Failed to save text recipe to database: {db_error}")
                     # Don't fail the entire request if DB save fails
                     pass
-            
+
+            await emit("completed", "Imported", 100)
             return structured_recipe
-            
+
         except Exception as e:
             logger.error(f"Error extracting recipe from text: {e}")
             return {"error": f"Failed to process text recipe: {str(e)}"}

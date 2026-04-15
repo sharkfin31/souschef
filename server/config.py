@@ -19,6 +19,7 @@ class Config:
     
     # API Keys and External Services
     OPENROUTER_API_KEY: str = os.getenv('OPENROUTER_API_KEY', '')
+    OPENROUTER_MAX_TOKENS: int = int(os.getenv('OPENROUTER_MAX_TOKENS', '3072'))
     SUPABASE_URL: str = os.getenv('SUPABASE_URL', '')
     SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
     SUPABASE_JWT_SECRET: str = os.getenv('SUPABASE_JWT_SECRET', '')
@@ -90,6 +91,7 @@ if config.SUPABASE_URL and config.SUPABASE_KEY:
 
 # Export commonly used values for backward compatibility
 OPENROUTER_API_KEY = config.OPENROUTER_API_KEY
+OPENROUTER_MAX_TOKENS = config.OPENROUTER_MAX_TOKENS
 SUPABASE_URL = config.SUPABASE_URL
 SUPABASE_KEY = config.SUPABASE_KEY
 SUPABASE_JWT_SECRET = config.SUPABASE_JWT_SECRET

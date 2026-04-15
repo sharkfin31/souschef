@@ -2,14 +2,22 @@ import httpx
 import re
 import json
 from typing import Optional, Dict, Any
-from config import OPENROUTER_API_KEY
+from config import OPENROUTER_API_KEY, OPENROUTER_MAX_TOKENS
 from utils.helpers import setup_logger
 
 # Setup logging
 logger = setup_logger(__name__)
 
 async def process_with_ai(content: str) -> Optional[Dict[str, Any]]:
-    """Process recipe content with OpenRouter AI to extract structured recipe data"""
+    """Process recipe content with OpenRouter AI to extract structured recipe data.
+
+    Each successful invocation performs exactly one HTTP POST to OpenRouter
+    (chat/completions). Callers should scrape/build content once, then call this once.
+    """
+    logger.info(
+        "OpenRouter: single chat/completions request (input_chars=%s)",
+        len(content) if content else 0,
+    )
     prompt = f"""
 You are an expert recipe analyzer. Extract and structure recipe information from the provided content.
 
@@ -97,7 +105,7 @@ Return ONLY the JSON object with no additional text, explanations, or formatting
                         }
                     ],
                     "temperature": 0.1,
-                    "max_tokens": 4000
+                    "max_tokens": OPENROUTER_MAX_TOKENS,
                 },
                 timeout=45.0
             )

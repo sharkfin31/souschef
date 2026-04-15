@@ -10,7 +10,9 @@ import os
 import json
 import asyncio
 import random
-from typing import Dict, Any, Optional, List
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+ProgressCb = Optional[Callable[[str, str, int], Awaitable[None]]]
 from apify_client import ApifyClientAsync
 from services.ai_service import process_with_ai
 from services.db_service import save_recipe_to_db
@@ -158,23 +160,34 @@ async def scrape_instagram_post(url: str) -> Dict[str, Any]:
                 "suggestion": "Try again later or check if the Instagram post is publicly accessible."
             }
 
-async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_recipe_from_instagram(
+    url: str,
+    user_id: Optional[str] = None,
+    on_progress: ProgressCb = None,
+) -> Dict[str, Any]:
     """
     Extract recipe information from Instagram post using Apify
-    
+
     Args:
         url: Instagram post URL
         user_id: Optional user ID for database association
-        
+        on_progress: Optional async callback (stage_key, label, percent).
+
     Returns:
         Dict containing extracted recipe data or error information
     """
+
+    async def emit(stage: str, label: str, pct: int) -> None:
+        if on_progress:
+            await on_progress(stage, label, pct)
+
     try:
         logger.info(f"Starting Instagram recipe extraction for URL: {url}")
-        
+
         # Add small delay to be respectful
         await asyncio.sleep(random.uniform(1, 2))
-        
+
+        await emit("scraping", "Scraping Instagram post…", 15)
         # Scrape the Instagram post
         scrape_result = await scrape_instagram_post(url)
         
@@ -210,7 +223,8 @@ async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> 
             }
         
         logger.info(f"Processing {len(caption)} characters with AI")
-        
+
+        await emit("ai", "Structuring caption with AI…", 45)
         # Process content with AI
         recipe_data = await process_with_ai(caption)
         if not recipe_data:
@@ -221,6 +235,7 @@ async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> 
                 "raw_caption": caption[:200] + "..." if len(caption) > 200 else caption
             }
         
+        await emit("saving", "Saving to your library…", 78)
         # Save to database
         source_info = f"Instagram: @{username} - {url}" if username else f"Instagram: {url}"
         recipe_id = await save_recipe_to_db(recipe_data, source_info, image_url, user_id)
@@ -247,7 +262,8 @@ async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> 
             await set_recipe_video_url(recipe_id, video_url_out)
         
         logger.info(f"Successfully extracted and saved recipe: {recipe_data.get('title', 'Untitled')}")
-        
+
+        await emit("completed", "Imported", 100)
         # Return successful result with additional Instagram data
         return {
             "success": True,
@@ -258,7 +274,7 @@ async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> 
             "title": recipe_data.get("title", "Untitled Recipe"),
             "description": recipe_data.get("description", ""),
             "prep_time": recipe_data.get("prepTime"),
-            "cook_time": recipe_data.get("cookTime"), 
+            "cook_time": recipe_data.get("cookTime"),
             "total_time": recipe_data.get("totalTime"),
             "servings": recipe_data.get("servings"),
             "difficulty": recipe_data.get("difficulty"),
@@ -273,10 +289,10 @@ async def get_recipe_from_instagram(url: str, user_id: Optional[str] = None) -> 
                 "likes": post_data.get("likesCount", 0),
                 "comments": post_data.get("commentsCount", 0),
                 "timestamp": post_data.get("timestamp"),
-                "shortcode": extract_instagram_shortcode(url)
-            }
+                "shortcode": extract_instagram_shortcode(url),
+            },
         }
-        
+
     except Exception as e:
         error_msg = str(e)
         logger.error(f"Unexpected error extracting from Instagram: {error_msg}")

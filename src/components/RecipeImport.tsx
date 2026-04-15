@@ -6,6 +6,7 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  Check,
 } from 'lucide-react';
 import { Recipe } from '../types/recipe';
 import {
@@ -13,8 +14,11 @@ import {
   extractRecipeFromMultipleImages,
   extractRecipeFromPDF,
   extractRecipeFromText,
+  type ImportJobSnapshot,
 } from '../services/api/recipeApi';
+import { mergeStageTrail, type StageTrailEntry } from '@/lib/importProgressUi';
 import { useNotification } from '../context/NotificationContext';
+import { getImportFlowErrorParts } from '@/lib/importFlowErrors';
 import {
   Dialog,
   DialogContent,
@@ -66,6 +70,13 @@ const RecipeImport = ({
   const { addNotification } = useNotification();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    label: string;
+    percent: number;
+    stage: string;
+    status: ImportJobSnapshot['status'];
+  } | null>(null);
+  const [stageTrail, setStageTrail] = useState<StageTrailEntry[]>([]);
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -78,6 +89,18 @@ const RecipeImport = ({
     setPdfFile(null);
     setRecipeText('');
     setLoading(false);
+    setImportProgress(null);
+    setStageTrail([]);
+  }, []);
+
+  const trackJobProgress = useCallback((job: ImportJobSnapshot) => {
+    setImportProgress({
+      label: job.stage_label,
+      percent: job.percent,
+      stage: job.stage,
+      status: job.status,
+    });
+    setStageTrail((prev) => mergeStageTrail(prev, job));
   }, []);
 
   useEffect(() => {
@@ -112,18 +135,29 @@ const RecipeImport = ({
   const handleLinkSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!url.trim()) {
-      addNotification('warning', 'Please enter a URL');
+      addNotification('warning', 'Link import: URL missing', {
+        description: 'Paste a full recipe page URL, then tap Import.',
+      });
       return;
     }
     setLoading(true);
+    setStageTrail([{ stage: 'starting', label: 'Starting import…' }]);
+    setImportProgress({
+      label: 'Starting import…',
+      percent: 0,
+      stage: 'starting',
+      status: 'pending',
+    });
     try {
-      const recipe = await extractRecipeFromUrl(url);
+      const recipe = await extractRecipeFromUrl(url, trackJobProgress);
       finishImport(recipe, 'Recipe imported successfully!');
     } catch (err) {
       console.error(err);
-      addNotification('error', err instanceof Error ? err.message : 'Failed to import recipe');
+      const { title, description } = getImportFlowErrorParts(err, 'link');
+      addNotification('error', title, { description });
     } finally {
       setLoading(false);
+      setImportProgress(null);
     }
   };
 
@@ -171,21 +205,29 @@ const RecipeImport = ({
   const handleImageSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (images.length === 0) {
-      addNotification('warning', 'Please select at least one image');
+      addNotification('warning', 'Image import: no photos', {
+        description: 'Add one or more recipe photos (camera roll or drag-and-drop), then Import.',
+      });
       return;
     }
     setLoading(true);
+    setStageTrail([{ stage: 'starting', label: 'Starting import…' }]);
+    setImportProgress({
+      label: 'Starting import…',
+      percent: 0,
+      stage: 'starting',
+      status: 'pending',
+    });
     try {
-      const recipe = await extractRecipeFromMultipleImages(images);
+      const recipe = await extractRecipeFromMultipleImages(images, trackJobProgress);
       finishImport(recipe, 'Recipe imported from image(s) successfully!');
     } catch (err) {
       console.error(err);
-      addNotification(
-        'error',
-        err instanceof Error ? err.message : 'Failed to import recipe from image(s)'
-      );
+      const { title, description } = getImportFlowErrorParts(err, 'image');
+      addNotification('error', title, { description });
     } finally {
       setLoading(false);
+      setImportProgress(null);
     }
   };
 
@@ -193,11 +235,15 @@ const RecipeImport = ({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== 'application/pdf') {
-      addNotification('error', 'Please select a PDF file');
+      addNotification('error', 'PDF import: wrong file type', {
+        description: 'Choose a file ending in .pdf (application/pdf).',
+      });
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      addNotification('error', 'PDF file must be smaller than 10MB');
+      addNotification('error', 'PDF import: file too large', {
+        description: 'Maximum size is 10 MB. Compress the PDF or split it and try again.',
+      });
       return;
     }
     setPdfFile(file);
@@ -206,41 +252,70 @@ const RecipeImport = ({
   const handlePdfSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!pdfFile) {
-      addNotification('warning', 'Please select a PDF file');
+      addNotification('warning', 'PDF import: no file', {
+        description: 'Tap the upload area and choose a PDF before importing.',
+      });
       return;
     }
     setLoading(true);
+    setStageTrail([{ stage: 'starting', label: 'Starting import…' }]);
+    setImportProgress({
+      label: 'Starting import…',
+      percent: 0,
+      stage: 'starting',
+      status: 'pending',
+    });
     try {
-      const recipe = await extractRecipeFromPDF(pdfFile);
+      const recipe = await extractRecipeFromPDF(pdfFile, trackJobProgress);
       finishImport(recipe, 'Recipe imported from PDF successfully!');
     } catch (err) {
       console.error(err);
-      addNotification('error', err instanceof Error ? err.message : 'Failed to import recipe from PDF');
+      const { title, description } = getImportFlowErrorParts(err, 'pdf');
+      addNotification('error', title, { description });
     } finally {
       setLoading(false);
+      setImportProgress(null);
     }
   };
 
   const handleTextSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!recipeText.trim()) {
-      addNotification('warning', 'Please enter recipe text');
+      addNotification('warning', 'Text import: empty', {
+        description: 'Paste ingredients, steps, and times into the box, then Import.',
+      });
       return;
     }
     setLoading(true);
+    setStageTrail([{ stage: 'starting', label: 'Starting import…' }]);
+    setImportProgress({
+      label: 'Starting import…',
+      percent: 0,
+      stage: 'starting',
+      status: 'pending',
+    });
     try {
-      const recipe = await extractRecipeFromText(recipeText);
+      const recipe = await extractRecipeFromText(recipeText, trackJobProgress);
       finishImport(recipe, 'Recipe imported from text successfully!');
     } catch (err) {
       console.error(err);
-      addNotification(
-        'error',
-        err instanceof Error ? err.message : 'Failed to import recipe from text'
-      );
+      const { title, description } = getImportFlowErrorParts(err, 'text');
+      addNotification('error', title, { description });
     } finally {
       setLoading(false);
+      setImportProgress(null);
     }
   };
+
+  const progressPct = importProgress?.percent ?? 0;
+  const liveStatusLabel =
+    importProgress?.status === 'pending'
+      ? 'Queued on server'
+      : importProgress?.status === 'running'
+        ? 'Running on server'
+        : importProgress?.status === 'completed'
+          ? 'Finishing up'
+          : '';
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -259,6 +334,69 @@ const RecipeImport = ({
             </DialogHeader>
 
             <div className="space-y-4 pt-1">
+            {loading ? (
+              <div
+                className="rounded-lg border border-border bg-muted/30 px-3 py-3"
+                role="status"
+                aria-live="polite"
+                aria-atomic="false"
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/50 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Live updates
+                    </span>
+                    {liveStatusLabel ? (
+                      <span className="truncate text-[10px] text-muted-foreground/90">· {liveStatusLabel}</span>
+                    ) : null}
+                  </div>
+                  <span className="shrink-0 tabular-nums text-xs font-semibold text-foreground">
+                    {Math.round(progressPct)}%
+                  </span>
+                </div>
+
+                {stageTrail.length > 0 ? (
+                  <ol className="mb-3 max-h-32 space-y-1.5 overflow-y-auto border-b border-border/50 pb-3">
+                    {stageTrail.map((entry, i) => {
+                      const isLast = i === stageTrail.length - 1;
+                      return (
+                        <li
+                          key={`${entry.stage}-${i}`}
+                          className={cn(
+                            'flex items-start gap-2 text-[11px] leading-snug',
+                            isLast ? 'font-medium text-foreground' : 'text-muted-foreground'
+                          )}
+                        >
+                          {isLast ? (
+                            <Loader2
+                              className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary"
+                              aria-hidden
+                            />
+                          ) : (
+                            <Check
+                              className="mt-0.5 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-500"
+                              aria-hidden
+                            />
+                          )}
+                          <span className="min-w-0">{entry.label}</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : null}
+
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
             {method === 'link' && (
               <form onSubmit={handleLinkSubmit} className="space-y-4">
                 <div className="space-y-2">

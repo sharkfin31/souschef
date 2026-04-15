@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, type ChangeEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   getRecipeById,
@@ -26,6 +26,8 @@ import {
   Minus,
   Pencil,
   Play,
+  PictureInPicture2,
+  Film,
   Plus,
   Tags,
   Trash2,
@@ -92,6 +94,73 @@ const RecipeDetail = () => {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const videoFileInputRef = useRef<HTMLInputElement>(null);
   const recipeVideoRef = useRef<HTMLVideoElement>(null);
+  const recipeVideoMenuRef = useRef<HTMLDivElement>(null);
+
+  /** Desktop (lg+): in-page vs PiP. Sub-lg: always treated as embedded in layout. */
+  const [recipeVideoMode, setRecipeVideoMode] = useState<'embedded' | 'pip'>('embedded');
+  const [isLgViewport, setIsLgViewport] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  );
+  const [recipeVideoPlayMenuOpen, setRecipeVideoPlayMenuOpen] = useState(false);
+
+  const effectiveRecipeVideoMode: 'embedded' | 'pip' =
+    isLgViewport ? recipeVideoMode : 'embedded';
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => setIsLgViewport(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  useLayoutEffect(() => {
+    try {
+      const saved = localStorage.getItem('souschef-recipe-video-mode');
+      if (saved === 'embedded' || saved === 'pip') {
+        setRecipeVideoMode(saved);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    setRecipeVideoMode(window.matchMedia('(max-width: 1023px)').matches ? 'embedded' : 'pip');
+  }, []);
+
+  const persistRecipeVideoMode = (mode: 'embedded' | 'pip') => {
+    setRecipeVideoMode(mode);
+    try {
+      localStorage.setItem('souschef-recipe-video-mode', mode);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    const v = recipeVideoRef.current;
+    if (effectiveRecipeVideoMode === 'embedded' && v && document.pictureInPictureElement === v) {
+      void document.exitPictureInPicture().catch(() => {});
+    }
+  }, [effectiveRecipeVideoMode]);
+
+  useEffect(() => {
+    if (!recipeVideoPlayMenuOpen) return;
+    const close = (e: MouseEvent) => {
+      const el = recipeVideoMenuRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setRecipeVideoPlayMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setRecipeVideoPlayMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [recipeVideoPlayMenuOpen]);
 
   // ===== HELPER FUNCTIONS =====
 
@@ -270,7 +339,9 @@ const RecipeDetail = () => {
     // Check if we've reached the 8-tag limit
     if (recipe.tags.length >= 8) {
       setNewTag('');
-      addNotification('warning', 'Maximum of 8 tags allowed per recipe');
+      addNotification('warning', 'Tags: limit reached', {
+        description: 'Remove a tag before adding another (maximum 8 per recipe).',
+      });
       return;
     }
     
@@ -284,7 +355,9 @@ const RecipeDetail = () => {
     // Check if tag already exists (case insensitive)
     if (recipe.tags.some(tag => tag.toLowerCase() === formattedTag.toLowerCase())) {
       setNewTag('');
-      addNotification('info', 'Tag already exists');
+      addNotification('info', 'Tag already on recipe', {
+        description: `“${formattedTag}” is already in the list.`,
+      });
       return;
     }
     
@@ -345,7 +418,9 @@ const RecipeDetail = () => {
   const handleVideoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.size > MAX_RECIPE_VIDEO_BYTES) {
-      addNotification('error', 'Video must be 50 MB or smaller.');
+      addNotification('error', 'Video upload: file too large', {
+        description: 'Choose an MP4, WebM, or MOV under 50 MB, then try again.',
+      });
       e.target.value = '';
       setPendingVideoFile(null);
       return;
@@ -355,7 +430,9 @@ const RecipeDetail = () => {
 
   const handleSubmitVideoUpload = async () => {
     if (!id || !pendingVideoFile) {
-      addNotification('warning', 'Choose a video file first.');
+      addNotification('warning', 'Video upload: no file', {
+        description: 'Use Manage media → Upload and pick a video before confirming.',
+      });
       return;
     }
     setSavingVideo(true);
@@ -366,7 +443,13 @@ const RecipeDetail = () => {
       closeMediaModal();
       addNotification('success', 'Video uploaded and linked to this recipe.');
     } catch (err) {
-      addNotification('error', err instanceof Error ? err.message : 'Video upload failed.');
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addNotification('error', 'Video upload failed', {
+        description:
+          msg.length > 200
+            ? `${msg.slice(0, 197)}…`
+            : `${msg} If this persists, try a smaller file or a different format.`,
+      });
     } finally {
       setSavingVideo(false);
     }
@@ -381,17 +464,37 @@ const RecipeDetail = () => {
         return;
       }
       if (!document.pictureInPictureEnabled) {
-        addNotification('warning', 'Picture-in-picture is not supported in this browser.');
+        addNotification('warning', 'Picture-in-picture not available', {
+          description:
+            'This browser or device does not support PiP. Use Play → “On this page” to watch inline.',
+        });
         return;
       }
       await v.play();
       await v.requestPictureInPicture();
     } catch (err) {
-      addNotification(
-        'error',
-        err instanceof Error ? err.message : 'Could not start picture-in-picture.'
-      );
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addNotification('error', 'Picture-in-picture could not start', {
+        description: `${msg} Try Play → “On this page”, or use the on-page player controls.`,
+      });
     }
+  };
+
+  const handleDesktopRecipeVideoPlayChoice = async (mode: 'embedded' | 'pip') => {
+    persistRecipeVideoMode(mode);
+    setRecipeVideoPlayMenuOpen(false);
+    const v = recipeVideoRef.current;
+    if (mode === 'embedded') {
+      if (v && document.pictureInPictureElement === v) {
+        await document.exitPictureInPicture().catch(() => {});
+      }
+      requestAnimationFrame(() => {
+        void v?.play().catch(() => {});
+        v?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+      return;
+    }
+    await handlePlayRecipeVideoPip();
   };
 
   const handleConfirmDeleteVideo = async () => {
@@ -405,7 +508,10 @@ const RecipeDetail = () => {
       setMediaModalOpen(false);
       addNotification('success', 'Video removed from this recipe.');
     } catch (err) {
-      addNotification('error', err instanceof Error ? err.message : 'Failed to remove video.');
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addNotification('error', 'Remove video failed', {
+        description: msg.length > 220 ? `${msg.slice(0, 217)}…` : msg,
+      });
     } finally {
       setSavingVideo(false);
     }
@@ -414,20 +520,56 @@ const RecipeDetail = () => {
   const handleSaveRecipeEdit = async () => {
     if (!recipe || !id) return;
     if (!newTitle.trim()) {
-      addNotification('warning', 'Please enter a recipe title.');
+      addNotification('warning', 'Save recipe: title missing', {
+        description: 'Enter a title in the heading field before saving.',
+      });
       return;
     }
     const trimmedInstructions = instructionDrafts.map((s) => s.trim()).filter(Boolean);
     if (trimmedInstructions.length === 0) {
-      addNotification('warning', 'Add at least one instruction step, or cancel editing.');
+      addNotification('warning', 'Save recipe: no steps', {
+        description: 'Add at least one instruction step, or cancel editing.',
+      });
       return;
     }
 
     setSavingRecipe(true);
     try {
       await updateRecipeTitle(id, newTitle.trim());
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addNotification('error', 'Save recipe: title failed', {
+        description: msg.length > 200 ? `${msg.slice(0, 197)}…` : msg,
+      });
+      setSavingRecipe(false);
+      return;
+    }
+    try {
       await replaceRecipeInstructions(id, trimmedInstructions);
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addNotification('error', 'Save recipe: instructions failed', {
+        description: msg.length > 200 ? `${msg.slice(0, 197)}…` : msg,
+      });
+      setSavingRecipe(false);
+      return;
+    }
+    try {
       await updateRecipeTags(id, recipe.tags);
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addNotification('error', 'Save recipe: tags failed', {
+        description:
+          (msg.length > 200 ? `${msg.slice(0, 197)}…` : msg) +
+          ' Title and steps may have saved; refresh the page to confirm.',
+      });
+      setSavingRecipe(false);
+      return;
+    }
+    try {
       const updated = await getRecipeById(id);
       setRecipe(updated);
       setIsEditingRecipe(false);
@@ -437,7 +579,13 @@ const RecipeDetail = () => {
     } catch (err) {
       addNotification(
         'error',
-        err instanceof Error ? err.message : 'Failed to update recipe.'
+        'Save recipe: reload failed',
+        {
+          description:
+            err instanceof Error
+              ? `${err.message} Changes may still be on the server — try leaving and opening this recipe again.`
+              : 'Could not reload the recipe after saving.',
+        }
       );
       console.error(err);
     } finally {
@@ -580,18 +728,68 @@ const RecipeDetail = () => {
               </button>
             </TooltipTrigger>
           )}
-          {recipe.videoUrl ? (
-            <TooltipTrigger label="Play video">
-              <button
-                type="button"
-                onClick={() => void handlePlayRecipeVideoPip()}
-                disabled={savingRecipe || savingVideo}
-                className="icon-hit text-muted-foreground hover:text-primary disabled:pointer-events-none disabled:opacity-50"
-                aria-label="Play recipe video in picture-in-picture"
-              >
-                <Play className="size-5" />
-              </button>
-            </TooltipTrigger>
+          {recipe.videoUrl && isLgViewport ? (
+            <div ref={recipeVideoMenuRef} className="relative">
+              <TooltipTrigger label="Play recipe video">
+                <button
+                  type="button"
+                  onClick={() => setRecipeVideoPlayMenuOpen((o) => !o)}
+                  disabled={savingRecipe || savingVideo}
+                  className={cn(
+                    'icon-hit text-muted-foreground hover:text-primary disabled:pointer-events-none disabled:opacity-50',
+                    recipeVideoPlayMenuOpen && 'text-primary'
+                  )}
+                  aria-expanded={recipeVideoPlayMenuOpen}
+                  aria-haspopup="true"
+                  aria-controls="recipe-video-play-menu"
+                  aria-label="Recipe video play options"
+                >
+                  <Play className="size-5" />
+                </button>
+              </TooltipTrigger>
+              {recipeVideoPlayMenuOpen ? (
+                <div
+                  id="recipe-video-play-menu"
+                  role="menu"
+                  className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(17rem,calc(100vw-2rem))] rounded-lg border border-border bg-card p-3 text-left shadow-lg"
+                >
+                  <div
+                    className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1"
+                    role="group"
+                    aria-label="Video playback mode"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void handleDesktopRecipeVideoPlayChoice('embedded')}
+                      className={cn(
+                        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors',
+                        recipeVideoMode === 'embedded'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <Film className="size-3.5 shrink-0" aria-hidden />
+                      On this page
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void handleDesktopRecipeVideoPlayChoice('pip')}
+                      className={cn(
+                        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors',
+                        recipeVideoMode === 'pip'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <PictureInPicture2 className="size-3.5 shrink-0" aria-hidden />
+                      PiP
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <TooltipTrigger label="Manage media">
             <button
@@ -673,6 +871,34 @@ const RecipeDetail = () => {
           {recipe.description && (
             <p className="text-gray-600 mb-4 text-sm italic">{recipe.description}</p>
           )}
+
+          {recipe.videoUrl ? (
+            <div
+              className={cn(
+                effectiveRecipeVideoMode === 'embedded'
+                  ? 'mb-6 w-full max-w-3xl'
+                  : 'pointer-events-none fixed top-0 left-0 z-[-1] h-px w-px overflow-hidden opacity-0'
+              )}
+            >
+              <video
+                ref={recipeVideoRef}
+                src={recipe.videoUrl}
+                poster={recipe.imageUrl ?? undefined}
+                className={cn(
+                  'w-full rounded-lg border border-border bg-black object-contain',
+                  effectiveRecipeVideoMode === 'embedded'
+                    ? 'aspect-video max-h-[min(70vh,520px)]'
+                    : 'h-px w-px'
+                )}
+                playsInline
+                controls={effectiveRecipeVideoMode === 'embedded'}
+                preload="metadata"
+                {...(effectiveRecipeVideoMode === 'pip'
+                  ? { 'aria-hidden': true as const }
+                  : { 'aria-label': 'Recipe video' })}
+              />
+            </div>
+          ) : null}
 
           {(recipe.prepTime || recipe.cookTime) && (
             <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
@@ -1205,17 +1431,6 @@ const RecipeDetail = () => {
         </DialogContent>
       </Dialog>
 
-      {recipe.videoUrl ? (
-        <video
-          ref={recipeVideoRef}
-          src={recipe.videoUrl}
-          poster={recipe.imageUrl ?? undefined}
-          className="pointer-events-none fixed top-0 left-0 h-px w-px overflow-hidden opacity-0"
-          playsInline
-          preload="metadata"
-          aria-hidden
-        />
-      ) : null}
     </div>
   );
 };

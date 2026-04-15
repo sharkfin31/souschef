@@ -16,6 +16,7 @@ from pathlib import Path
 # Import routes and configuration directly
 from routes.recipe_routes import router as recipe_router
 from routes.grocery_routes import router as grocery_router
+from routes.import_job_routes import router as import_job_router
 from config import UPLOAD_DIR
 from utils.helpers import setup_logger
 
@@ -80,6 +81,7 @@ if assets_dir.exists():
 # Include routers
 app.include_router(recipe_router)
 app.include_router(grocery_router)
+app.include_router(import_job_router)
 
 @app.get("/", tags=["root"])
 async def read_root():

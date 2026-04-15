@@ -10,7 +10,9 @@ This service handles PDF recipe extraction using:
 import io
 import os
 import tempfile
-from typing import Dict, Any, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
+
+ProgressCb = Optional[Callable[[str, str, int], Awaitable[None]]]
 from fastapi import UploadFile, BackgroundTasks
 
 # PDF processing imports
@@ -30,18 +32,29 @@ from utils.helpers import setup_logger
 # Setup logging
 logger = setup_logger(__name__)
 
-async def process_recipe_pdf(pdf_file: UploadFile, background_tasks: BackgroundTasks = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+async def process_recipe_pdf(
+    pdf_file: UploadFile,
+    background_tasks: BackgroundTasks = None,
+    user_id: Optional[str] = None,
+    on_progress: ProgressCb = None,
+) -> Dict[str, Any]:
     """
     Process a PDF file to extract recipe information
-    
+
     Args:
         pdf_file: Uploaded PDF file
         background_tasks: FastAPI background tasks
         user_id: Optional user ID for database association
-        
+        on_progress: Optional async callback (stage_key, label, percent).
+
     Returns:
         Dict containing extracted recipe data or error information
     """
+
+    async def emit(stage: str, label: str, pct: int) -> None:
+        if on_progress:
+            await on_progress(stage, label, pct)
+
     if not PDF_DEPENDENCIES_AVAILABLE:
         return {
             "error": "PDF processing not available",
@@ -51,18 +64,21 @@ async def process_recipe_pdf(pdf_file: UploadFile, background_tasks: BackgroundT
     
     try:
         logger.info(f"Starting PDF processing for file: {pdf_file.filename}")
-        
+
+        await emit("fetching", "Reading PDF…", 10)
         # Read PDF file content
         pdf_content = await pdf_file.read()
-        
+
+        await emit("parsing", "Extracting text from PDF…", 28)
         # Try text extraction first (faster for text-based PDFs)
         extracted_text = await extract_text_from_pdf(pdf_content)
-        
+
         # If text extraction yields poor results, try OCR
         if not extracted_text or len(extracted_text.strip()) < 50:
             logger.info("Text extraction yielded minimal content, attempting OCR")
+            await emit("scraping", "Running OCR on scanned pages…", 40)
             extracted_text = await extract_text_via_ocr(pdf_content)
-        
+
         if not extracted_text or not extracted_text.strip():
             return {
                 "error": "No text found in PDF",
@@ -71,7 +87,8 @@ async def process_recipe_pdf(pdf_file: UploadFile, background_tasks: BackgroundT
             }
         
         logger.info(f"Extracted {len(extracted_text)} characters from PDF")
-        
+
+        await emit("ai", "Structuring with AI…", 58)
         # Process extracted text with AI
         recipe_data = await process_with_ai(extracted_text)
         if not recipe_data:
@@ -82,6 +99,7 @@ async def process_recipe_pdf(pdf_file: UploadFile, background_tasks: BackgroundT
                 "raw_text": extracted_text[:500] + "..." if len(extracted_text) > 500 else extracted_text
             }
         
+        await emit("saving", "Saving to your library…", 85)
         # Save to database
         source_info = f"PDF: {pdf_file.filename}"
         recipe_id = await save_recipe_to_db(recipe_data, source_info, None, user_id)
@@ -93,7 +111,8 @@ async def process_recipe_pdf(pdf_file: UploadFile, background_tasks: BackgroundT
             }
         
         logger.info(f"Successfully extracted and saved recipe from PDF: {recipe_data.get('title', 'Untitled')}")
-        
+
+        await emit("completed", "Imported", 100)
         # Return successful result
         return {
             "success": True,
